@@ -54,6 +54,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.TextStyle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.withContext
+import ru.merrcurys.seacard.db.DatabaseProvider
 
 enum class SortType(val displayName: String) {
     ADD_TIME("По времени добавления"),
@@ -62,16 +68,6 @@ enum class SortType(val displayName: String) {
     USAGE_FREQ("По частоте использования")
 }
 
-data class Card(
-    val name: String, 
-    val code: String, 
-    val type: String,
-    val addTime: Long = System.currentTimeMillis(),
-    val usageCount: Int = 0,
-    val color: Int = 0xFFFFFFFF.toInt(),
-    val coverAsset: String? = null
-)
-
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,82 +75,37 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             val context = this
-            var cards by remember { mutableStateOf<List<Card>>(emptyList()) }
+            val dao = remember { DatabaseProvider.get(context).cardDao() }
+            val cardsFromDb by dao.getAllFlow().map { list -> list.map { it.toCard() } }
+                .collectAsStateWithLifecycle(initialValue = emptyList())
             var currentSortType by remember { mutableStateOf(loadSortTypePref(context)) }
             var showCoverPicker by remember { mutableStateOf(false) }
             var pendingCoverAsset by remember { mutableStateOf<String?>(null) }
 
-            // Функция загрузки карт
-            fun loadCards() {
-                val prefs = getSharedPreferences("cards", Context.MODE_PRIVATE)
-                val cardSet = prefs.getStringSet("card_list", setOf()) ?: setOf()
-                cards = cardSet.mapNotNull { cardString ->
-                    val parts = cardString.split("|")
-                    when (parts.size) {
-                        2 -> Card(parts[0], parts[1], "barcode")
-                        3 -> Card(parts[0], parts[1], parts[2])
-                        5 -> Card(parts[0], parts[1], parts[2], parts[3].toLongOrNull() ?: System.currentTimeMillis(), parts[4].toIntOrNull() ?: 0)
-                        6 -> Card(parts[0], parts[1], parts[2], parts[3].toLongOrNull() ?: System.currentTimeMillis(), parts[4].toIntOrNull() ?: 0, parts[5].toIntOrNull() ?: 0xFFFFFFFF.toInt())
-                        7 -> Card(
-                            parts[0],
-                            parts[1],
-                            parts[2],
-                            parts[3].toLongOrNull() ?: System.currentTimeMillis(),
-                            parts[4].toIntOrNull() ?: 0, // usageCount
-                            parts[5].toIntOrNull() ?: 0xFFFFFFFF.toInt(), // color
-                            parts[6].takeIf { it.isNotBlank() } // coverAsset
-                        )
-                        else -> null
-                    }
-                }.sortedWith(getSortComparator(currentSortType))
+            val cards = remember(cardsFromDb, currentSortType) {
+                cardsFromDb.sortedWith(getSortComparator(currentSortType))
             }
 
-            val scanCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                if (result.resultCode == RESULT_OK) {
-                    loadCards()
+            val scope = rememberCoroutineScope()
+            val scanCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+                // Список обновится по Flow
+            }
+
+            val cardDetailLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+                // Список обновится по Flow
+            }
+
+            val settingsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+
+            fun updateCardUsage(cardId: Long) {
+                scope.launch(Dispatchers.IO) {
+                    dao.incrementUsage(cardId)
                 }
-            }
-
-            val cardDetailLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                if (result.resultCode == RESULT_OK) {
-                    loadCards()
-                }
-            }
-
-            val settingsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-                // Обновляем градиент при возвращении из настроек
-                loadCards()
-            }
-            
-            // Функция обновления частоты использования карты
-            fun updateCardUsage(cardName: String) {
-                val prefs = getSharedPreferences("cards", Context.MODE_PRIVATE)
-                val cardSet = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-                
-                val updatedCardSet = cardSet.map { cardString ->
-                    val parts = cardString.split("|")
-                    if (parts[0] == cardName) {
-                        when (parts.size) {
-                            2 -> "${parts[0]}|${parts[1]}|barcode|${System.currentTimeMillis()}|1|${0xFFFFFFFF.toInt()}"
-                            3 -> "${parts[0]}|${parts[1]}|${parts[2]}|${System.currentTimeMillis()}|1|${0xFFFFFFFF.toInt()}"
-                            5 -> "${parts[0]}|${parts[1]}|${parts[2]}|${parts[3]}|${(parts[4].toIntOrNull() ?: 0) + 1}|${0xFFFFFFFF.toInt()}"
-                            6 -> "${parts[0]}|${parts[1]}|${parts[2]}|${parts[3]}|${(parts[4].toIntOrNull() ?: 0) + 1}|${parts[5]}"
-                            7 -> "${parts[0]}|${parts[1]}|${parts[2]}|${parts[3]}|${(parts[4].toIntOrNull() ?: 0) + 1}|${parts[5]}|${parts[6]}"
-                            else -> cardString
-                        }
-                    } else {
-                        cardString
-                    }
-                }.toSet()
-                
-                prefs.edit { putStringSet("card_list", updatedCardSet) }
-                loadCards()
             }
             
             LaunchedEffect(Unit) {
                 val window = this@MainActivity.window
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
-                loadCards()
             }
             
             SeaCardTheme {
@@ -179,13 +130,9 @@ class MainActivity : ComponentActivity() {
                             showCoverPicker = true
                         },
                         onCardClick = { card ->
-                            updateCardUsage(card.name)
+                            updateCardUsage(card.id)
                             val intent = Intent(this@MainActivity, CardDetailActivity::class.java).apply {
-                                putExtra("card_name", card.name)
-                                putExtra("card_code", card.code)
-                                putExtra("code_type", card.type)
-                                putExtra("card_color", card.color)
-                                putExtra("cover_asset", card.coverAsset)
+                                putExtra("card_id", card.id)
                             }
                             cardDetailLauncher.launch(intent)
                         },
@@ -198,20 +145,9 @@ class MainActivity : ComponentActivity() {
                             loadCards()
                         },
                         onDeleteCards = { cardsToDelete ->
-                            val prefs = getSharedPreferences("cards", MODE_PRIVATE)
-                            val cardSet = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-                            val updatedCardSet = cardSet.filterNot { cardString ->
-                                val parts = cardString.split("|")
-                                cardsToDelete.any { card ->
-                                    parts.getOrNull(0) == card.name &&
-                                    parts.getOrNull(1) == card.code &&
-                                    parts.getOrNull(2) == card.type &&
-                                    (parts.size < 6 || parts.getOrNull(5)?.toIntOrNull() == card.color) &&
-                                    (parts.size < 7 || parts.getOrNull(6) == card.coverAsset)
-                                }
-                            }.toSet()
-                            prefs.edit { putStringSet("card_list", updatedCardSet) }
-                            loadCards()
+                            scope.launch(Dispatchers.IO) {
+                                cardsToDelete.forEach { dao.deleteById(it.id) }
+                            }
                         }
                     )
                 }
@@ -507,8 +443,7 @@ fun MainScreen(
                                         )
                                 ) {
                                     val context = LocalContext.current
-                                    val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-                                    val frontPath = prefs.getString("cover_front_${card.name}_${card.code}", null)
+                                    val frontPath = card.frontCoverPath
                                     key(frontPath) {
                                         Box(
                                             modifier = Modifier.fillMaxSize(),

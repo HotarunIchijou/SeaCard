@@ -46,9 +46,13 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.core.content.edit
+import ru.merrcurys.seacard.db.CardEntity
+import ru.merrcurys.seacard.db.DatabaseProvider
 import android.net.Uri
 import android.os.Build
 import java.io.File
@@ -193,7 +197,7 @@ class ScanCardActivity : ComponentActivity() {
             if (coverAsset != null) {
                 LaunchedEffect(cardCode) {
                     if (!cardSaved && cardName.isNotBlank() && cardCode.isNotBlank()) {
-                        saveCardWithCover(this@ScanCardActivity, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, coverAsset)
+                        saveCardWithCover(this@ScanCardActivity, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, coverAsset, null)
                         cardSaved = true
                         setResult(RESULT_OK)
                         finish()
@@ -234,7 +238,7 @@ class ScanCardActivity : ComponentActivity() {
                             },
                             onSaveCard = {
                                 if (cardName.isNotBlank() && cardCode.isNotBlank()) {
-                                    saveCardWithCover(this@ScanCardActivity, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, if (coverAsset != null) coverAsset else null)
+                                    saveCardWithCover(this@ScanCardActivity, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, if (coverAsset != null) coverAsset else null, null)
                                     setResult(RESULT_OK)
                                     finish()
                                 }
@@ -277,18 +281,13 @@ class ScanCardActivity : ComponentActivity() {
                                             backPath = saveBitmapAsWebp(context, bmp, fileName)
                                         }
                                     }
-                                    // Сохраняем пути в SharedPreferences
-                                    val prefs = context.getSharedPreferences("cards", MODE_PRIVATE)
-                                    if (frontPath != null) {
-                                        prefs.edit { putString("cover_front_${cardName}_${cardCode}", frontPath) }
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        saveCardWithCover(context, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, frontPath, backPath)
+                                        withContext(Dispatchers.Main) {
+                                            setResult(RESULT_OK)
+                                            finish()
+                                        }
                                     }
-                                    if (backPath != null) {
-                                        prefs.edit { putString("cover_back_${cardName}_${cardCode}", backPath) }
-                                    }
-                                    // Сохраняем карту: путь к лицевой обложке как coverAsset
-                                    saveCardWithCover(context, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, frontPath)
-                                    setResult(RESULT_OK)
-                                    finish()
                                 }
                             },
                             coverAsset = null,
@@ -351,24 +350,38 @@ class ScanCardActivity : ComponentActivity() {
         cameraExecutor.shutdown()
     }
     
-    private fun saveCard(context: Context, name: String, code: String, codeType: String, color: Int) {
-        val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-        val cards = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-        val currentTime = System.currentTimeMillis()
-        cards.add("$name|$code|$codeType|$currentTime|0|$color")
-        prefs.edit { putStringSet("card_list", cards) }
+    private suspend fun saveCard(context: Context, name: String, code: String, codeType: String, color: Int) {
+        withContext(Dispatchers.IO) {
+            val dao = DatabaseProvider.get(context).cardDao()
+            dao.insert(CardEntity(
+                name = name,
+                code = code,
+                type = codeType,
+                addTime = System.currentTimeMillis(),
+                usageCount = 0,
+                color = color,
+                frontCoverPath = null,
+                backCoverPath = null,
+                note = null
+            ))
+        }
     }
 
-    private fun saveCardWithCover(context: Context, name: String, code: String, codeType: String, color: Int, coverAsset: String?) {
-        val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-        val cards = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-        val currentTime = System.currentTimeMillis()
-        if (coverAsset != null) {
-            cards.add("$name|$code|$codeType|$currentTime|0|$color|$coverAsset")
-        } else {
-            cards.add("$name|$code|$codeType|$currentTime|0|$color")
+    private suspend fun saveCardWithCover(context: Context, name: String, code: String, codeType: String, color: Int, frontCoverPath: String?, backCoverPath: String? = null) {
+        withContext(Dispatchers.IO) {
+            val dao = DatabaseProvider.get(context).cardDao()
+            dao.insert(CardEntity(
+                name = name,
+                code = code,
+                type = codeType,
+                addTime = System.currentTimeMillis(),
+                usageCount = 0,
+                color = color,
+                frontCoverPath = frontCoverPath,
+                backCoverPath = backCoverPath,
+                note = null
+            ))
         }
-        prefs.edit { putStringSet("card_list", cards) }
     }
 
     companion object {

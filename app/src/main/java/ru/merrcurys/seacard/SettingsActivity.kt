@@ -54,6 +54,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import ru.merrcurys.seacard.ui.theme.BerlinAzure
 import ru.merrcurys.seacard.ui.theme.GradientColorOption
 import ru.merrcurys.seacard.ui.theme.rememberGradientState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import ru.merrcurys.seacard.db.CardEntity
+import ru.merrcurys.seacard.db.DatabaseProvider
 
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,11 +68,17 @@ class SettingsActivity : ComponentActivity() {
         val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
             if (uri != null) {
                 try {
-                    val prefs = getSharedPreferences("cards", Context.MODE_PRIVATE)
-                    val cardSet = prefs.getStringSet("card_list", setOf()) ?: setOf()
+                    val lines = runBlocking(Dispatchers.IO) {
+                        val dao = DatabaseProvider.get(this@SettingsActivity).cardDao()
+                        dao.getAll().map { e ->
+                            val cover = e.frontCoverPath?.takeIf { it.isNotBlank() }
+                            if (cover != null) "${e.name}|${e.code}|${e.type}|${e.addTime}|${e.usageCount}|${e.color}|$cover"
+                            else "${e.name}|${e.code}|${e.type}|${e.addTime}|${e.usageCount}|${e.color}"
+                        }
+                    }
                     contentResolver.openOutputStream(uri)?.use { out ->
                         OutputStreamWriter(out).use { writer ->
-                            cardSet.forEach { writer.write(it + "\n") }
+                            lines.forEach { writer.write(it + "\n") }
                         }
                     }
                     Toast.makeText(this, "Карточки экспортированы", Toast.LENGTH_SHORT).show()
@@ -78,58 +89,55 @@ class SettingsActivity : ComponentActivity() {
         }
         val importLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             if (uri != null) {
-                val prefs = getSharedPreferences("cards", Context.MODE_PRIVATE)
-                val cardSet = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-                val assetList = assets.list("cards")?.toSet() ?: emptySet()
-                val importedNames = mutableListOf<String>()
-                val errors = mutableListOf<String>()
                 try {
-                    contentResolver.openInputStream(uri)?.use { input ->
-                        BufferedReader(InputStreamReader(input)).useLines { lines ->
-                            // Собираем уже существующие карточки по ключу (name, code, type)
-                            val existingKeys = cardSet.map { s ->
-                                val p = s.split("|")
-                                Triple(p.getOrNull(0), p.getOrNull(1), p.getOrNull(2))
-                            }.toMutableSet()
-                            lines.forEach { line ->
-                                val parts = line.split("|")
-                                if (parts.size >= 2) {
-                                    val name = parts[0]
-                                    val code = parts[1]
-                                    val type = parts.getOrNull(2) ?: "barcode"
-                                    val cardKey = Triple(name, code, type)
-                                    if (existingKeys.contains(cardKey)) {
-                                        // Уже есть такая карта — пропускаем
-                                        return@forEach
-                                    }
-                                    val coverAsset = if (parts.size >= 7) parts[6] else null
-                                    val fixedCover = if (coverAsset != null && coverAsset.startsWith("cards/") && assetList.contains(coverAsset.removePrefix("cards/"))) {
-                                        coverAsset
+                    val assetList = assets.list("cards")?.toSet() ?: emptySet()
+                    val (imported, errors) = runBlocking(Dispatchers.IO) {
+                        val dao = DatabaseProvider.get(this@SettingsActivity).cardDao()
+                        val importedNames = mutableListOf<String>()
+                        val errs = mutableListOf<String>()
+                        contentResolver.openInputStream(uri)?.use { input ->
+                            BufferedReader(InputStreamReader(input)).useLines { lines ->
+                                lines.forEach { line ->
+                                    val parts = line.split("|")
+                                    if (parts.size >= 2) {
+                                        val name = parts[0]
+                                        val code = parts[1]
+                                        val type = parts.getOrNull(2) ?: "barcode"
+                                        if (dao.getByNameCodeType(name, code, type) != null) return@forEach
+                                        val coverAsset = if (parts.size >= 7) parts[6] else null
+                                        val fixedCover = if (coverAsset != null && coverAsset.startsWith("cards/") && assetList.contains(coverAsset.removePrefix("cards/"))) {
+                                            coverAsset
+                                        } else {
+                                            val found = CoverNames.coverNameMap.entries.find { it.value.equals(name, ignoreCase = true) }?.key
+                                            if (found != null) "cards/$found" else null
+                                        }
+                                        val addTime = parts.getOrNull(3)?.toLongOrNull() ?: System.currentTimeMillis()
+                                        val usageCount = parts.getOrNull(4)?.toIntOrNull() ?: 0
+                                        val color = parts.getOrNull(5)?.toIntOrNull() ?: 0xFFFFFFFF.toInt()
+                                        try {
+                                            dao.insert(CardEntity(
+                                                name = name,
+                                                code = code,
+                                                type = type,
+                                                addTime = addTime,
+                                                usageCount = usageCount,
+                                                color = color,
+                                                frontCoverPath = fixedCover,
+                                                backCoverPath = null,
+                                                note = null
+                                            ))
+                                            importedNames.add(name)
+                                        } catch (e: Exception) {
+                                            errs.add(name)
+                                        }
                                     } else {
-                                        val found = CoverNames.coverNameMap.entries.find { it.value.equals(name, ignoreCase = true) }?.key
-                                        if (found != null) "cards/$found" else null
+                                        errs.add(line)
                                     }
-                                    val newLine = if (fixedCover != null) {
-                                        parts.take(6).joinToString("|") + "|" + fixedCover
-                                    } else if (parts.size >= 7) {
-                                        parts.take(6).joinToString("|")
-                                    } else {
-                                        line
-                                    }
-                                    try {
-                                        cardSet.add(newLine)
-                                        existingKeys.add(cardKey)
-                                        importedNames.add(name)
-                                    } catch (e: Exception) {
-                                        errors.add(name)
-                                    }
-                                } else {
-                                    errors.add(line)
                                 }
                             }
                         }
+                        Pair(importedNames, errs)
                     }
-                    prefs.edit { putStringSet("card_list", cardSet) }
                     if (errors.isEmpty()) {
                         Toast.makeText(this, "Все карты были скопированы", Toast.LENGTH_LONG).show()
                     } else {
@@ -364,9 +372,9 @@ fun SettingsScreen(
                 confirmButton = {
                     androidx.compose.material3.TextButton(
                         onClick = {
-                            // Удаляем все карточки
-                            val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-                            prefs.edit { remove("card_list") }
+                            runBlocking(Dispatchers.IO) {
+                                DatabaseProvider.get(context).cardDao().deleteAll()
+                            }
                             showDeleteDialog = false
                             onBack()
                         }
