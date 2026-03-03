@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -168,9 +169,10 @@ fun CardCoverPickerScreen(
                                 contentPadding = PaddingValues(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                flingBehavior = ScrollableDefaults.flingBehavior(),
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                items(filteredCovers) { coverName ->
+                                items(filteredCovers, key = { it }) { coverName ->
                                     val assetPath = "cards/$coverName"
                                     val imageBitmap: ImageBitmap? = try {
                                         val input = assetManager.open(assetPath)

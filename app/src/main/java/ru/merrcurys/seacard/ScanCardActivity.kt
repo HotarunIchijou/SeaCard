@@ -238,9 +238,13 @@ class ScanCardActivity : ComponentActivity() {
                             },
                             onSaveCard = {
                                 if (cardName.isNotBlank() && cardCode.isNotBlank()) {
-                                    saveCardWithCover(this@ScanCardActivity, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, if (coverAsset != null) coverAsset else null, null)
-                                    setResult(RESULT_OK)
-                                    finish()
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        saveCardWithCover(this@ScanCardActivity, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, if (coverAsset != null) coverAsset else null, null)
+                                        withContext(Dispatchers.Main) {
+                                            setResult(RESULT_OK)
+                                            finish()
+                                        }
+                                    }
                                 }
                             },
                             onBack = { finish() },

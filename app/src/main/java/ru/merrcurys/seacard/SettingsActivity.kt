@@ -89,11 +89,9 @@ class SettingsActivity : ComponentActivity() {
                     val result = runBlocking(Dispatchers.IO) {
                         contentResolver.openInputStream(uri)?.use { input ->
                             val bytes = input.readBytes()
-                            if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B) {
-                                // ZIP (PK..)
+                            if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
                                 BackupManager.importFromZip(this@SettingsActivity, bytes.inputStream())
                             } else {
-                                // Старый формат TXT (построчно name|code|...)
                                 importLegacyTxt(this@SettingsActivity, String(bytes, StandardCharsets.UTF_8))
                             }
                         } ?: Pair(0, listOf("Не удалось открыть файл"))
@@ -144,7 +142,7 @@ class SettingsActivity : ComponentActivity() {
 }
 
 /** Импорт из старого формата TXT (построчно name|code|type|...). Без обложек. */
-private fun importLegacyTxt(context: Context, content: String): Pair<Int, List<String>> {
+private suspend fun importLegacyTxt(context: Context, content: String): Pair<Int, List<String>> {
     val dao = DatabaseProvider.get(context).cardDao()
     val assetList = context.assets.list("cards")?.toSet() ?: emptySet()
     val errors = mutableListOf<String>()

@@ -14,6 +14,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -142,7 +143,6 @@ class MainActivity : ComponentActivity() {
                         onSortTypeChange = { newSortType ->
                             currentSortType = newSortType
                             saveSortTypePref(context, newSortType)
-                            loadCards()
                         },
                         onDeleteCards = { cardsToDelete ->
                             scope.launch(Dispatchers.IO) {
@@ -402,9 +402,10 @@ fun MainScreen(
                             contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 80.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            flingBehavior = ScrollableDefaults.flingBehavior(),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(filteredCards) { card ->
+                            items(filteredCards, key = { it.id }) { card ->
                                 val isSelected = selectedCards.contains(card)
                                 Card(
                                     colors = CardDefaults.cardColors(

@@ -6,6 +6,8 @@ import org.json.JSONObject
 import ru.merrcurys.seacard.db.CardEntity
 import ru.merrcurys.seacard.db.DatabaseProvider
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.zip.ZipEntry
@@ -83,9 +85,9 @@ object BackupManager {
     /**
      * Импортирует карточки и обложки из ZIP.
      * Существующие карточки (по name+code+type) пропускаются.
-     * Возвращает пару (импортировано, ошибки).
+     * Возвращает пару (импортировано, ошибки). Вызывать из корутины (например runBlocking(IO)).
      */
-    fun importFromZip(context: Context, inputStream: InputStream): Pair<Int, List<String>> {
+    suspend fun importFromZip(context: Context, inputStream: InputStream): Pair<Int, List<String>> = withContext(Dispatchers.IO) {
         val dao = DatabaseProvider.get(context).cardDao()
         val coversDir = File(context.filesDir, "covers")
         if (!coversDir.exists()) coversDir.mkdirs()
@@ -101,7 +103,7 @@ object BackupManager {
                 zis.closeEntry()
                 entry = zis.nextEntry
             }
-            val cardsJson = entriesByPath[CARDS_JSON] ?: return Pair(0, listOf("В архиве нет cards.json"))
+            val cardsJson = entriesByPath[CARDS_JSON] ?: return@withContext Pair(0, listOf("В архиве нет cards.json"))
             val array = JSONArray(String(cardsJson, Charsets.UTF_8))
             for (i in 0 until array.length()) {
                 try {
@@ -149,6 +151,6 @@ object BackupManager {
                 }
             }
         }
-        return Pair(imported, errors)
+        Pair(imported, errors)
     }
 }
