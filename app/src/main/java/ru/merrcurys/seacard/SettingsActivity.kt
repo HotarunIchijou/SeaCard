@@ -50,6 +50,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import java.io.OutputStreamWriter
 import java.io.InputStreamReader
 import java.io.BufferedReader
+import java.nio.charset.StandardCharsets
 import androidx.compose.foundation.layout.navigationBarsPadding
 import ru.merrcurys.seacard.ui.theme.BerlinAzure
 import ru.merrcurys.seacard.ui.theme.GradientColorOption
@@ -57,6 +58,7 @@ import ru.merrcurys.seacard.ui.theme.rememberGradientState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import ru.merrcurys.seacard.backup.BackupManager
 import ru.merrcurys.seacard.db.CardEntity
 import ru.merrcurys.seacard.db.DatabaseProvider
 
@@ -65,23 +67,17 @@ class SettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         var exportCards: (() -> Unit)? = null
         var importCards: (() -> Unit)? = null
-        val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
+        val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
             if (uri != null) {
                 try {
-                    val lines = runBlocking(Dispatchers.IO) {
+                    runBlocking(Dispatchers.IO) {
                         val dao = DatabaseProvider.get(this@SettingsActivity).cardDao()
-                        dao.getAll().map { e ->
-                            val cover = e.frontCoverPath?.takeIf { it.isNotBlank() }
-                            if (cover != null) "${e.name}|${e.code}|${e.type}|${e.addTime}|${e.usageCount}|${e.color}|$cover"
-                            else "${e.name}|${e.code}|${e.type}|${e.addTime}|${e.usageCount}|${e.color}"
+                        val cards = dao.getAll()
+                        contentResolver.openOutputStream(uri)?.use { out ->
+                            BackupManager.exportToZip(this@SettingsActivity, cards, out)
                         }
                     }
-                    contentResolver.openOutputStream(uri)?.use { out ->
-                        OutputStreamWriter(out).use { writer ->
-                            lines.forEach { writer.write(it + "\n") }
-                        }
-                    }
-                    Toast.makeText(this, "Карточки экспортированы", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Бэкап экспортирован (карточки и обложки)", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     Toast.makeText(this, "Ошибка экспорта: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                 }
@@ -90,68 +86,31 @@ class SettingsActivity : ComponentActivity() {
         val importLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             if (uri != null) {
                 try {
-                    val assetList = assets.list("cards")?.toSet() ?: emptySet()
-                    val (imported, errors) = runBlocking(Dispatchers.IO) {
-                        val dao = DatabaseProvider.get(this@SettingsActivity).cardDao()
-                        val importedNames = mutableListOf<String>()
-                        val errs = mutableListOf<String>()
+                    val result = runBlocking(Dispatchers.IO) {
                         contentResolver.openInputStream(uri)?.use { input ->
-                            BufferedReader(InputStreamReader(input)).useLines { lines ->
-                                lines.forEach { line ->
-                                    val parts = line.split("|")
-                                    if (parts.size >= 2) {
-                                        val name = parts[0]
-                                        val code = parts[1]
-                                        val type = parts.getOrNull(2) ?: "barcode"
-                                        if (dao.getByNameCodeType(name, code, type) != null) return@forEach
-                                        val coverAsset = if (parts.size >= 7) parts[6] else null
-                                        val fixedCover = if (coverAsset != null && coverAsset.startsWith("cards/") && assetList.contains(coverAsset.removePrefix("cards/"))) {
-                                            coverAsset
-                                        } else {
-                                            val found = CoverNames.coverNameMap.entries.find { it.value.equals(name, ignoreCase = true) }?.key
-                                            if (found != null) "cards/$found" else null
-                                        }
-                                        val addTime = parts.getOrNull(3)?.toLongOrNull() ?: System.currentTimeMillis()
-                                        val usageCount = parts.getOrNull(4)?.toIntOrNull() ?: 0
-                                        val color = parts.getOrNull(5)?.toIntOrNull() ?: 0xFFFFFFFF.toInt()
-                                        try {
-                                            dao.insert(CardEntity(
-                                                name = name,
-                                                code = code,
-                                                type = type,
-                                                addTime = addTime,
-                                                usageCount = usageCount,
-                                                color = color,
-                                                frontCoverPath = fixedCover,
-                                                backCoverPath = null,
-                                                note = null
-                                            ))
-                                            importedNames.add(name)
-                                        } catch (e: Exception) {
-                                            errs.add(name)
-                                        }
-                                    } else {
-                                        errs.add(line)
-                                    }
-                                }
+                            val bytes = input.readBytes()
+                            if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B) {
+                                // ZIP (PK..)
+                                BackupManager.importFromZip(this@SettingsActivity, bytes.inputStream())
+                            } else {
+                                // Старый формат TXT (построчно name|code|...)
+                                importLegacyTxt(this@SettingsActivity, String(bytes, StandardCharsets.UTF_8))
                             }
-                        }
-                        Pair(importedNames, errs)
+                        } ?: Pair(0, listOf("Не удалось открыть файл"))
                     }
+                    val (imported, errors) = result
                     if (errors.isEmpty()) {
-                        Toast.makeText(this, "Все карты были скопированы", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, "Импортировано карт: $imported", Toast.LENGTH_LONG).show()
                     } else {
-                        errors.forEach { name ->
-                            Toast.makeText(this, "Ошибка при копировании карты $name", Toast.LENGTH_LONG).show()
-                        }
+                        Toast.makeText(this, "Импортировано: $imported. Ошибки: ${errors.take(3).joinToString()}", Toast.LENGTH_LONG).show()
                     }
                 } catch (e: Exception) {
                     Toast.makeText(this, "Ошибка импорта: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                 }
             }
         }
-        exportCards = { exportLauncher.launch("seacard_cards.txt") }
-        importCards = { importLauncher.launch("text/plain") }
+        exportCards = { exportLauncher.launch("seacard_backup.zip") }
+        importCards = { importLauncher.launch("*/*") }
         setContent {
             val context = this
             // Always use dark theme
@@ -182,6 +141,52 @@ class SettingsActivity : ComponentActivity() {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         prefs.edit { putInt("gradient_color", color.hashCode()) }
     }
+}
+
+/** Импорт из старого формата TXT (построчно name|code|type|...). Без обложек. */
+private fun importLegacyTxt(context: Context, content: String): Pair<Int, List<String>> {
+    val dao = DatabaseProvider.get(context).cardDao()
+    val assetList = context.assets.list("cards")?.toSet() ?: emptySet()
+    val errors = mutableListOf<String>()
+    var imported = 0
+    content.lines().forEach { line ->
+        val parts = line.split("|")
+        if (parts.size >= 2) {
+            val name = parts[0]
+            val code = parts[1]
+            val type = parts.getOrNull(2) ?: "barcode"
+            if (dao.getByNameCodeType(name, code, type) != null) return@forEach
+            val coverAsset = if (parts.size >= 7) parts[6] else null
+            val fixedCover = if (coverAsset != null && coverAsset.startsWith("cards/") && assetList.contains(coverAsset.removePrefix("cards/"))) {
+                coverAsset
+            } else {
+                val found = CoverNames.coverNameMap.entries.find { it.value.equals(name, ignoreCase = true) }?.key
+                if (found != null) "cards/$found" else null
+            }
+            val addTime = parts.getOrNull(3)?.toLongOrNull() ?: System.currentTimeMillis()
+            val usageCount = parts.getOrNull(4)?.toIntOrNull() ?: 0
+            val color = parts.getOrNull(5)?.toIntOrNull() ?: 0xFFFFFFFF.toInt()
+            try {
+                dao.insert(CardEntity(
+                    name = name,
+                    code = code,
+                    type = type,
+                    addTime = addTime,
+                    usageCount = usageCount,
+                    color = color,
+                    frontCoverPath = fixedCover,
+                    backCoverPath = null,
+                    note = null
+                ))
+                imported++
+            } catch (e: Exception) {
+                errors.add(name)
+            }
+        } else if (line.isNotBlank()) {
+            errors.add(line)
+        }
+    }
+    return Pair(imported, errors)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
