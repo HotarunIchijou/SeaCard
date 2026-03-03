@@ -2,7 +2,10 @@ package ru.merrcurys.seacard
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Rect
+import android.graphics.RectF
 import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -23,6 +26,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import kotlin.math.PI
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.sin
 import java.io.InputStream
 import android.widget.Toast
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +40,55 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.layout.onSizeChanged
 import ru.merrcurys.seacard.ui.theme.SeaCardTheme
+
+/** Полоска со шкалой градусов: тянем влево/вправо — шкала прокручивается, угол 0..360°. */
+@Composable
+private fun RotationScaleStrip(
+    rotationDegrees: Float,
+    color: Color
+) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+        val centerX = w / 2f
+        val stepPx = 24f
+        val stepDeg = 15f
+        val degToPx = stepPx / stepDeg
+        val margin = 20f
+        val startDeg = floor((rotationDegrees - (centerX + margin) / degToPx) / stepDeg) * stepDeg
+        val endDeg = ceil((rotationDegrees + (w - centerX + margin) / degToPx) / stepDeg) * stepDeg
+        val numSteps = ((endDeg - startDeg) / stepDeg).toInt() + 1
+        for (i in 0 until numSteps) {
+            val d = startDeg + i * stepDeg
+            val x = centerX + (d - rotationDegrees) * degToPx
+            if (x in -margin..(w + margin)) {
+                val degInt = (d.toInt() % 360 + 360) % 360
+                val tickH = if (degInt == 0 || degInt == 90 || degInt == 180 || degInt == 270) h * 0.5f
+                else if (d.toInt() % 45 == 0) h * 0.35f
+                else h * 0.2f
+                drawLine(color = color, start = Offset(x, h / 2f - tickH / 2f), end = Offset(x, h / 2f + tickH / 2f), strokeWidth = 1.5f)
+            }
+        }
+        drawLine(color = color.copy(alpha = 0.9f), start = Offset(centerX, 0f), end = Offset(centerX, h), strokeWidth = 2f)
+    }
+}
+
+/** Поворачивает bitmap на заданный угол (в градусах), возвращает новый bitmap. */
+private fun rotateBitmap(source: Bitmap, degrees: Float): Bitmap {
+    if (degrees == 0f) return source
+    val matrix = Matrix().apply { postRotate(degrees) }
+    val rect = RectF(0f, 0f, source.width.toFloat(), source.height.toFloat())
+    matrix.mapRect(rect)
+    val newWidth = kotlin.math.ceil(rect.width()).toInt().coerceAtLeast(1)
+    val newHeight = kotlin.math.ceil(rect.height()).toInt().coerceAtLeast(1)
+    val result = Bitmap.createBitmap(newWidth, newHeight, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(result)
+    canvas.translate(newWidth / 2f, newHeight / 2f)
+    canvas.rotate(degrees)
+    canvas.translate(-source.width / 2f, -source.height / 2f)
+    canvas.drawBitmap(source, 0f, 0f, null)
+    return result
+}
 
 @Composable
 fun ImageCropDialog(
@@ -56,6 +114,8 @@ fun ImageCropDialog(
         var scale by remember { mutableStateOf(1f) }
         var offset by remember { mutableStateOf(Offset.Zero) }
         var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+        // Поворот ограничен 0..360°
+        var rotationDegrees by remember { mutableStateOf(0f) }
 
         val colorScheme = MaterialTheme.colorScheme
         val isDark = colorScheme.background == Color(0xFF111111) || colorScheme.background == Color(0xFF232323)
@@ -87,7 +147,7 @@ fun ImageCropDialog(
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            // Image
+                            // Поворот только через graphicsLayer — без пересоздания bitmap, без лагов
                             Image(
                                 bitmap = bitmap.asImageBitmap(),
                                 contentDescription = null,
@@ -98,7 +158,8 @@ fun ImageCropDialog(
                                         scaleX = scale,
                                         scaleY = scale,
                                         translationX = offset.x,
-                                        translationY = offset.y
+                                        translationY = offset.y,
+                                        rotationZ = rotationDegrees
                                     )
                             )
                             // Overlay & crop frame
@@ -177,6 +238,35 @@ fun ImageCropDialog(
                             }
                         }
                     }
+                    // Бесконечно прокручиваемая шкала поворота (полоска с делениями)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Поворот: ${rotationDegrees.toInt()}°",
+                            color = colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                                .pointerInput(Unit) {
+                                    detectHorizontalDragGestures { _, dragAmount ->
+                                        rotationDegrees = (rotationDegrees + dragAmount * 0.5f).coerceIn(0f, 360f)
+                                    }
+                                }
+                        ) {
+                            RotationScaleStrip(
+                                rotationDegrees = rotationDegrees,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     Text(
                         text = "Двигайте и масштабируйте изображение, чтобы выбрать область",
                         color = colorScheme.onSurfaceVariant,
@@ -199,54 +289,59 @@ fun ImageCropDialog(
 
                         val bitmapW = bitmap.width.toFloat()
                         val bitmapH = bitmap.height.toFloat()
-                        
-                        // Рассчитываем, как изображение отображается на экране
-                        // Сначала изображение центрируется и масштабируется до fit
                         val fitScale = minOf(boxW / bitmapW, boxH / bitmapH)
-                        // Затем применяется пользовательский масштаб
                         val finalScale = fitScale * scale
-                        
-                        // Размеры изображения на экране
-                        val displayedW = bitmapW * finalScale
-                        val displayedH = bitmapH * finalScale
-                        
-                        // Позиция изображения на экране с учетом смещения
-                        val imageLeftOnScreen = (boxW - displayedW) / 2f + offset.x
-                        val imageTopOnScreen = (boxH - displayedH) / 2f + offset.y
-                        
-                        // Преобразуем координаты кадрирования из экрана в изображение
-                        val scaleX = bitmapW / displayedW
-                        val scaleY = bitmapH / displayedH
-                        
-                        // Координаты обрезки в пикселях исходного изображения
-                        val cropLeft = ((frameLeft - imageLeftOnScreen) * scaleX).coerceIn(0f, bitmapW)
-                        val cropTop = ((frameTop - imageTopOnScreen) * scaleY).coerceIn(0f, bitmapH)
-                        val cropRight = ((frameRight - imageLeftOnScreen) * scaleX).coerceIn(0f, bitmapW)
-                        val cropBottom = ((frameBottom - imageTopOnScreen) * scaleY).coerceIn(0f, bitmapH)
-                        
-                        // Убеждаемся, что координаты в правильном порядке
-                        val finalCropLeft = minOf(cropLeft, cropRight)
-                        val finalCropTop = minOf(cropTop, cropBottom)
-                        val finalCropRight = maxOf(cropLeft, cropRight)
-                        val finalCropBottom = maxOf(cropTop, cropBottom)
-                        
-                        // Проверяем, что область обрезки корректна
-                        if (finalCropRight > finalCropLeft + 1 && finalCropBottom > finalCropTop + 1) {
-                            val rect = Rect(
-                                finalCropLeft.toInt(),
-                                finalCropTop.toInt(),
-                                finalCropRight.toInt(),
-                                finalCropBottom.toInt()
-                            )
-                            
+                        val centerX = boxW / 2f + offset.x
+                        val centerY = boxH / 2f + offset.y
+                        val angleRad = rotationDegrees * PI / 180.0
+                        val cosA = cos(angleRad).toFloat()
+                        val sinA = sin(angleRad).toFloat()
+
+                        fun screenToOriginalBitmap(sx: Float, sy: Float): Pair<Float, Float> {
+                            val relX = sx - centerX
+                            val relY = sy - centerY
+                            val newRelX = relX * cosA + relY * sinA
+                            val newRelY = -relX * sinA + relY * cosA
+                            val bx = bitmapW / 2f + newRelX / finalScale
+                            val by = bitmapH / 2f + newRelY / finalScale
+                            return bx to by
+                        }
+
+                        val normalizedAngle = ((rotationDegrees % 360f) + 360f) % 360f
+                        val rotatedBitmap = rotateBitmap(bitmap, normalizedAngle)
+                        val rotatedW = rotatedBitmap.width.toFloat()
+                        val rotatedH = rotatedBitmap.height.toFloat()
+                        val angleRadPos = normalizedAngle * PI / 180.0
+                        val cosR = cos(angleRadPos).toFloat()
+                        val sinR = sin(angleRadPos).toFloat()
+
+                        fun originalToRotated(bx: Float, by: Float): Pair<Float, Float> {
+                            val dx = (bx - bitmapW / 2f) * cosR - (by - bitmapH / 2f) * sinR
+                            val dy = (bx - bitmapW / 2f) * sinR + (by - bitmapH / 2f) * cosR
+                            return rotatedW / 2f + dx to rotatedH / 2f + dy
+                        }
+
+                        val corners = listOf(
+                            screenToOriginalBitmap(frameLeft, frameTop),
+                            screenToOriginalBitmap(frameRight, frameTop),
+                            screenToOriginalBitmap(frameRight, frameBottom),
+                            screenToOriginalBitmap(frameLeft, frameBottom)
+                        ).map { (bx, by) -> originalToRotated(bx, by) }
+
+                        var minX = corners.minOf { it.first }.toInt()
+                        var minY = corners.minOf { it.second }.toInt()
+                        var maxX = corners.maxOf { it.first }.toInt()
+                        var maxY = corners.maxOf { it.second }.toInt()
+                        minX = minX.coerceAtLeast(0)
+                        minY = minY.coerceAtLeast(0)
+                        maxX = maxX.coerceAtMost(rotatedBitmap.width)
+                        maxY = maxY.coerceAtMost(rotatedBitmap.height)
+                        val cropW = (maxX - minX).coerceAtLeast(1).coerceAtMost(rotatedBitmap.width - minX)
+                        val cropH = (maxY - minY).coerceAtLeast(1).coerceAtMost(rotatedBitmap.height - minY)
+
+                        if (cropW >= 1 && cropH >= 1 && minX + cropW <= rotatedBitmap.width && minY + cropH <= rotatedBitmap.height) {
                             try {
-                                val cropped = Bitmap.createBitmap(
-                                    bitmap,
-                                    rect.left,
-                                    rect.top,
-                                    rect.width(),
-                                    rect.height()
-                                )
+                                val cropped = Bitmap.createBitmap(rotatedBitmap, minX, minY, cropW, cropH)
                                 onCrop(cropped)
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Ошибка при кадрировании: ${e.message}", Toast.LENGTH_LONG).show()
