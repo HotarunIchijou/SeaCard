@@ -60,6 +60,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.filled.TouchApp
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
@@ -194,11 +195,16 @@ class CardDetailActivity : ComponentActivity() {
             var frontImageUri by remember { mutableStateOf<Uri?>(null) }
             var showCropDialog by remember { mutableStateOf(false) }
             var cropImageUri by remember { mutableStateOf<Uri?>(null) }
+            var pendingFrontCameraUri by remember { mutableStateOf<Uri?>(null) }
             val scope = rememberCoroutineScope()
-            val frontImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                if (uri != null) {
-                    cropImageUri = uri
-                    showCropDialog = true
+            val frontImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val uri = result.data?.data ?: pendingFrontCameraUri
+                    pendingFrontCameraUri = null
+                    if (uri != null) {
+                        cropImageUri = uri
+                        showCropDialog = true
+                    }
                 }
             }
             
@@ -270,7 +276,11 @@ class CardDetailActivity : ComponentActivity() {
                                     withContext(Dispatchers.Main) { card = card?.copy(backCoverPath = path) }
                                 }
                             },
-                            onFrontCoverPick = { frontImagePicker.launch("image/*") },
+                            onFrontCoverPick = {
+                                val (intent, cameraUri) = createImagePickerChooserIntent(this@CardDetailActivity)
+                                pendingFrontCameraUri = cameraUri
+                                frontImagePicker.launch(intent)
+                            },
                             onBack = { finish() },
                             onDelete = {
                                 scope.launch(Dispatchers.IO) {
@@ -449,11 +459,15 @@ fun CardDetailScreen(
             result
         } catch (_: Exception) { null }
     }
-    // Лаунчеры для выбора фото
-    val backImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            backCropImageUri = uri
-            showBackCropDialog = true
+    var pendingBackCameraUri by remember { mutableStateOf<Uri?>(null) }
+    val backImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val uri = result.data?.data ?: pendingBackCameraUri
+            pendingBackCameraUri = null
+            if (uri != null) {
+                backCropImageUri = uri
+                showBackCropDialog = true
+            }
         }
     }
     var noteDraft by remember { mutableStateOf("") }
@@ -999,7 +1013,11 @@ fun CardDetailScreen(
                                     Text("Загрузить", color = colorScheme.onSurface, fontWeight = FontWeight.Medium)
                                 }
                                 Button(
-                                    onClick = { backImagePicker.launch("image/*") },
+                                    onClick = {
+                                        val (intent, cameraUri) = createImagePickerChooserIntent(context)
+                                        pendingBackCameraUri = cameraUri
+                                        backImagePicker.launch(intent)
+                                    },
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(44.dp),

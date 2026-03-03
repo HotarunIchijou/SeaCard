@@ -12,6 +12,7 @@ import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
@@ -93,18 +94,26 @@ class ScanCardActivity : ComponentActivity() {
             val context = this@ScanCardActivity
             val coroutineScope = rememberCoroutineScope()
 
-            // Launcher для выбора лицевой обложки
-            val frontCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                if (uri != null) {
-                    frontCropImageUri = uri
-                    showFrontCropDialog = true
+            var pendingFrontCameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
+            var pendingBackCameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
+            val frontCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val uri = result.data?.data ?: pendingFrontCameraUri
+                    pendingFrontCameraUri = null
+                    if (uri != null) {
+                        frontCropImageUri = uri
+                        showFrontCropDialog = true
+                    }
                 }
             }
-            // Launcher для выбора тыльной обложки
-            val backCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                if (uri != null) {
-                    backCropImageUri = uri
-                    showBackCropDialog = true
+            val backCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val uri = result.data?.data ?: pendingBackCameraUri
+                    pendingBackCameraUri = null
+                    if (uri != null) {
+                        backCropImageUri = uri
+                        showBackCropDialog = true
+                    }
                 }
             }
 
@@ -115,10 +124,12 @@ class ScanCardActivity : ComponentActivity() {
                 hasCameraPermission = isGranted
             }
 
-            // Launcher для выбора изображения из галереи
+            var pendingGalleryCameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
             val galleryLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.GetContent()
-            ) { uri ->
+                ActivityResultContracts.StartActivityForResult()
+            ) { result: ActivityResult ->
+                val uri = if (result.resultCode == android.app.Activity.RESULT_OK) result.data?.data ?: pendingGalleryCameraUri else null
+                pendingGalleryCameraUri = null
                 if (uri != null) {
                     try {
                         val image = InputImage.fromFilePath(context, uri)
@@ -248,7 +259,11 @@ class ScanCardActivity : ComponentActivity() {
                                 }
                             },
                             onBack = { finish() },
-                            onGalleryClick = { galleryLauncher.launch("image/*") },
+                            onGalleryClick = {
+                                val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
+                                pendingGalleryCameraUri = cameraUri
+                                galleryLauncher.launch(intent)
+                            },
                             coverAsset = coverAsset
                         )
                     } else {
@@ -298,8 +313,16 @@ class ScanCardActivity : ComponentActivity() {
                             onBack = { finish() },
                             frontCoverUri = frontCoverUri,
                             backCoverUri = backCoverUri,
-                            onFrontCoverPick = { frontCoverPicker.launch("image/*") },
-                            onBackCoverPick = { backCoverPicker.launch("image/*") },
+                            onFrontCoverPick = {
+                                val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
+                                pendingFrontCameraUri = cameraUri
+                                frontCoverPicker.launch(intent)
+                            },
+                            onBackCoverPick = {
+                                val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
+                                pendingBackCameraUri = cameraUri
+                                backCoverPicker.launch(intent)
+                            },
                             onFrontCoverRemove = { frontCoverUri = null },
                             onBackCoverRemove = { backCoverUri = null }
                         )
