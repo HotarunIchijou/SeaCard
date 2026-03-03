@@ -108,10 +108,7 @@ class ScanCardActivity : ComponentActivity() {
             }
 
             val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { hasCameraPermission = it }
-            var pendingGalleryCameraUri by remember { mutableStateOf<Uri?>(null) }
-            val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
-                val uri = if (result.resultCode == android.app.Activity.RESULT_OK) result.data?.data ?: pendingGalleryCameraUri else null
-                pendingGalleryCameraUri = null
+            val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
                 if (uri != null) {
                     try {
                         val image = InputImage.fromFilePath(context, uri)
@@ -197,11 +194,7 @@ class ScanCardActivity : ComponentActivity() {
                                 }
                             },
                             onBack = { finish() },
-                            onGalleryClick = {
-                                val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
-                                pendingGalleryCameraUri = cameraUri
-                                galleryLauncher.launch(intent)
-                            },
+                            onGalleryClick = { galleryLauncher.launch("image/*") },
                             coverAsset = viewModel.coverAsset
                         )
                     } else {
