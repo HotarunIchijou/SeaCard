@@ -61,11 +61,15 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.withContext
 import ru.merrcurys.seacard.db.DatabaseProvider
+import java.text.Collator
+import java.util.Locale
 
 enum class SortType(val displayName: String) {
     ADD_TIME("По времени добавления"),
     NAME_ASC("По названию (А-Я)"),
     NAME_DESC("По названию (Я-А)"),
+    NAME_ASC_LATIN("По названию (A-Z)"),
+    NAME_DESC_LATIN("По названию (Z-A)"),
     USAGE_FREQ("По частоте использования")
 }
 
@@ -173,8 +177,10 @@ class MainActivity : ComponentActivity() {
     private fun getSortComparator(sortType: SortType): Comparator<Card> {
         return when (sortType) {
             SortType.ADD_TIME -> compareByDescending { it.addTime }
-            SortType.NAME_ASC -> compareBy { it.name.lowercase() }
-            SortType.NAME_DESC -> compareByDescending { it.name.lowercase() }
+            SortType.NAME_ASC -> compareBy(Collator.getInstance(Locale("ru"))) { it.name }
+            SortType.NAME_DESC -> compareByDescending(Collator.getInstance(Locale("ru"))) { it.name }
+            SortType.NAME_ASC_LATIN -> compareBy(Collator.getInstance(Locale.ENGLISH)) { it.name }
+            SortType.NAME_DESC_LATIN -> compareByDescending(Collator.getInstance(Locale.ENGLISH)) { it.name }
             SortType.USAGE_FREQ -> compareByDescending { it.usageCount }
         }
     }
