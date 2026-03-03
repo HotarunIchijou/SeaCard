@@ -430,8 +430,15 @@ fun CardDetailScreen(
         try {
             var result: ImageBitmap? = null
             frontCoverPath?.let { path ->
-                val bmp = BitmapFactory.decodeFile(path)
-                if (bmp != null) result = bmp.asImageBitmap()
+                if (path.startsWith("cards/")) {
+                    val input = context2.assets.open(path)
+                    val bmp = BitmapFactory.decodeStream(input)
+                    input.close()
+                    if (bmp != null) result = bmp.asImageBitmap()
+                } else {
+                    val bmp = BitmapFactory.decodeFile(path)
+                    if (bmp != null) result = bmp.asImageBitmap()
+                }
             }
             if (result == null && coverAsset != null) {
                 val input = context2.assets.open(coverAsset)
@@ -865,23 +872,19 @@ fun CardDetailScreen(
                                         .clip(RoundedCornerShape(18.dp))
                                         .background(colorScheme.surfaceVariant.copy(alpha = 0.7f))
                                         .clickable {
-                                            // Только просмотр
-                                            frontCoverPath?.let { path ->
-                                                showFullScreenImage = true to Uri.fromFile(File(path))
-                                            } ?: run {
-                                                if (frontImageUri != null) {
-                                                    showFullScreenImage = true to frontImageUri
-                                                } else if (coverBitmap != null) {
-                                                    showFullScreenImage = true to null
-                                                }
+                                            // Только просмотр. Для asset (cards/...) Uri нет — полноэкран покажет coverBitmap
+                                            when {
+                                                frontCoverPath != null && !frontCoverPath!!.startsWith("cards/") ->
+                                                    showFullScreenImage = true to Uri.fromFile(File(frontCoverPath!!))
+                                                frontImageUri != null -> showFullScreenImage = true to frontImageUri
+                                                coverBitmap != null -> showFullScreenImage = true to null
                                             }
                                         },
                                 contentAlignment = Alignment.Center
                             ) {
                                 val frontBitmap = frontCoverPath?.let { path ->
-                                    try {
-                                        BitmapFactory.decodeFile(path)
-                                    } catch (_: Exception) { null }
+                                    if (path.startsWith("cards/")) null
+                                    else try { BitmapFactory.decodeFile(path) } catch (_: Exception) { null }
                                 } ?: frontImageUri?.let { rememberBitmapFromUri(it) } ?: coverBitmap?.let { null }
                                 if (frontBitmap != null) {
                                     Image(
