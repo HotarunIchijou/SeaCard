@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.scan
 
 import android.graphics.BitmapFactory
 import android.net.Uri

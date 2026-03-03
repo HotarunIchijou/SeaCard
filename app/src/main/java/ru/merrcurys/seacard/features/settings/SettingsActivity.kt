@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.settings
 
 import android.content.Context
 import android.os.Bundle
@@ -41,20 +41,20 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.collectAsState
 import ru.merrcurys.seacard.core.design.GradientBackground
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ArrowDownward
 import android.widget.Toast
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
-import java.io.OutputStreamWriter
 import java.io.InputStreamReader
-import java.io.BufferedReader
 import java.nio.charset.StandardCharsets
 import androidx.compose.foundation.layout.navigationBarsPadding
+import ru.merrcurys.seacard.BuildConfig
 import ru.merrcurys.seacard.core.design.BerlinAzure
 import ru.merrcurys.seacard.core.design.GradientColorOption
-import ru.merrcurys.seacard.core.design.rememberGradientState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -111,21 +111,16 @@ class SettingsActivity : ComponentActivity() {
         exportCards = { exportLauncher.launch("seacard_backup.zip") }
         importCards = { importLauncher.launch("*/*") }
         setContent {
-            val context = this
-            // Always use dark theme
-            val gradientState = rememberGradientState(context)
+            val viewModel: SettingsViewModel = viewModel()
+            val gradientColor by viewModel.gradientColor.collectAsState(initial = ru.merrcurys.seacard.core.design.BerlinAzure)
             LaunchedEffect(Unit) {
-                val window = this@SettingsActivity.window
-                WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+                WindowCompat.getInsetsController(this@SettingsActivity.window, this@SettingsActivity.window.decorView).isAppearanceLightStatusBars = false
             }
             SeaCardTheme {
-                GradientBackground(gradientColor = gradientState.gradientColor) {
+                GradientBackground(gradientColor = gradientColor) {
                     SettingsScreen(
-                        gradientColor = gradientState.gradientColor,
-                        onGradientColorChange = { color ->
-                            gradientState.updateGradientColor(color)
-                            saveGradientColorPref(context, color)
-                        },
+                        gradientColor = gradientColor,
+                        onGradientColorChange = { viewModel.setGradientColor(it) },
                         onBack = { finish() },
                         topBarContainerColor = Color.Transparent,
                         onExport = { exportCards?.invoke() },
@@ -134,11 +129,6 @@ class SettingsActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    private fun saveGradientColorPref(context: Context, color: Color) {
-        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        prefs.edit { putInt("gradient_color", color.hashCode()) }
     }
 }
 
@@ -251,7 +241,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        GradientColorOption.values().forEach { option ->
+                        for (option in GradientColorOption.values()) {
                             val isSelected = gradientColor == option.color
                             Box(
                                 modifier = Modifier

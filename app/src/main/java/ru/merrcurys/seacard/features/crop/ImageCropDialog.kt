@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.crop
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory

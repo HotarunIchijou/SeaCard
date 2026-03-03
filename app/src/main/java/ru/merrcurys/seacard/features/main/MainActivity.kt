@@ -1,8 +1,10 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.main
 
-import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import ru.merrcurys.seacard.features.scan.ScanCardActivity
+import ru.merrcurys.seacard.features.detail.CardDetailActivity
+import ru.merrcurys.seacard.features.settings.SettingsActivity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -39,150 +41,70 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.merrcurys.seacard.core.design.SeaCardTheme
 import ru.merrcurys.seacard.core.design.GradientBackground
 import ru.merrcurys.seacard.core.design.GradientUtils
-import java.util.*
-import androidx.core.content.edit
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.runtime.remember
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.TextStyle
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.withContext
-import ru.merrcurys.seacard.core.db.DatabaseProvider
 import ru.merrcurys.seacard.domain.entity.Card as CardModel
-import java.text.Collator
-import java.util.Locale
-
-enum class SortType(val displayName: String) {
-    ADD_TIME("По времени добавления"),
-    NAME_ASC("По названию (А-Я)"),
-    NAME_DESC("По названию (Я-А)"),
-    NAME_ASC_LATIN("По названию (A-Z)"),
-    NAME_DESC_LATIN("По названию (Z-A)"),
-    USAGE_FREQ("По частоте использования")
-}
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         setContent {
-            val context = this
-            val dao = remember { DatabaseProvider.get(context).cardDao() }
-            val cardsFromDb by dao.getAllFlow().map { list -> list.map { it.toCard() } }
-                .collectAsStateWithLifecycle(initialValue = emptyList())
-            var currentSortType by remember { mutableStateOf(loadSortTypePref(context)) }
-            var showCoverPicker by remember { mutableStateOf(false) }
-            var pendingCoverAsset by remember { mutableStateOf<String?>(null) }
+            val viewModel: MainViewModel = viewModel()
+            val cards by viewModel.cards.collectAsStateWithLifecycle(initialValue = emptyList())
+            val currentSortType by viewModel.sortType.collectAsStateWithLifecycle()
+            val showCoverPicker by viewModel.showCoverPicker.collectAsStateWithLifecycle()
 
-            val cards = remember(cardsFromDb, currentSortType) {
-                cardsFromDb.sortedWith(getSortComparator(currentSortType))
-            }
-
-            val scope = rememberCoroutineScope()
-            val scanCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
-                // Список обновится по Flow
-            }
-
-            val cardDetailLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
-                // Список обновится по Flow
-            }
-
+            val scanCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+            val cardDetailLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
             val settingsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+            val context = this@MainActivity
 
-            fun updateCardUsage(cardId: Long) {
-                scope.launch(Dispatchers.IO) {
-                    dao.incrementUsage(cardId)
-                }
-            }
-            
             LaunchedEffect(Unit) {
                 val window = this@MainActivity.window
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
             }
-            
+
             SeaCardTheme {
                 if (showCoverPicker) {
                     CardCoverPickerScreen(
                         onCoverSelected = { coverAsset: String? ->
-                            showCoverPicker = false
-                            pendingCoverAsset = coverAsset
-                            val intent = Intent(this@MainActivity, ScanCardActivity::class.java)
-                            if (coverAsset != null) intent.putExtra("cover_asset", coverAsset as String)
+                            viewModel.setShowCoverPicker(false)
+                            val intent = Intent(context, ScanCardActivity::class.java)
+                            if (coverAsset != null) intent.putExtra("cover_asset", coverAsset)
                             scanCardLauncher.launch(intent)
                         },
-                        onBack = {
-                            showCoverPicker = false
-                        }
+                        onBack = { viewModel.setShowCoverPicker(false) }
                     )
                 } else {
                     MainScreen(
                         cards = cards,
                         currentSortType = currentSortType,
-                        onAddCard = {
-                            showCoverPicker = true
-                        },
+                        onAddCard = { viewModel.setShowCoverPicker(true) },
                         onCardClick = { card ->
-                            updateCardUsage(card.id)
-                            val intent = Intent(this@MainActivity, CardDetailActivity::class.java).apply {
-                                putExtra("card_id", card.id)
-                            }
-                            cardDetailLauncher.launch(intent)
+                            viewModel.updateCardUsage(card.id)
+                            cardDetailLauncher.launch(Intent(context, CardDetailActivity::class.java).apply { putExtra("card_id", card.id) })
                         },
-                        onSettingsClick = {
-                            settingsLauncher.launch(Intent(context, SettingsActivity::class.java))
-                        },
-                        onSortTypeChange = { newSortType ->
-                            currentSortType = newSortType
-                            saveSortTypePref(context, newSortType)
-                        },
-                        onDeleteCards = { cardsToDelete ->
-                            scope.launch(Dispatchers.IO) {
-                                cardsToDelete.forEach { dao.deleteById(it.id) }
-                            }
-                        }
+                        onSettingsClick = { settingsLauncher.launch(Intent(context, SettingsActivity::class.java)) },
+                        onSortTypeChange = { viewModel.setSortType(it) },
+                        onDeleteCards = { viewModel.deleteCards(it) }
                     )
                 }
             }
-        }
-    }
-    
-    private fun loadSortTypePref(context: Context): SortType {
-        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val sortTypeName = prefs.getString("sort_type", SortType.ADD_TIME.name)
-        return try {
-            SortType.valueOf(sortTypeName ?: SortType.ADD_TIME.name)
-        } catch (e: IllegalArgumentException) {
-            SortType.ADD_TIME
-        }
-    }
-    
-    private fun saveSortTypePref(context: Context, sortType: SortType) {
-        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        prefs.edit { putString("sort_type", sortType.name) }
-    }
-    
-    private fun getSortComparator(sortType: SortType): Comparator<CardModel> {
-        return when (sortType) {
-            SortType.ADD_TIME -> compareByDescending { it.addTime }
-            SortType.NAME_ASC -> compareBy(Collator.getInstance(Locale("ru"))) { it.name }
-            SortType.NAME_DESC -> compareByDescending(Collator.getInstance(Locale("ru"))) { it.name }
-            SortType.NAME_ASC_LATIN -> compareBy(Collator.getInstance(Locale.ENGLISH)) { it.name }
-            SortType.NAME_DESC_LATIN -> compareByDescending(Collator.getInstance(Locale.ENGLISH)) { it.name }
-            SortType.USAGE_FREQ -> compareByDescending { it.usageCount }
         }
     }
 }

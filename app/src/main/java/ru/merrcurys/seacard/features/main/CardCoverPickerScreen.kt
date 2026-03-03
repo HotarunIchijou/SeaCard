@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.main
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image

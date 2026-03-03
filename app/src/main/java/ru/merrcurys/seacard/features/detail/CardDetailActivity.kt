@@ -1,6 +1,9 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.detail
 
+import android.app.Application
 import android.graphics.Bitmap
+import ru.merrcurys.seacard.features.crop.ImageCropDialog
+import ru.merrcurys.seacard.features.scan.CardInputSection
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -19,6 +22,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -186,10 +191,9 @@ class CardDetailActivity : ComponentActivity() {
         }
         setBrightness(1.0f) // Максимальная яркость
         
-        val dao = DatabaseProvider.get(this).cardDao()
-        
         setContent {
-            var card by remember { mutableStateOf<CardModel?>(null) }
+            val viewModel: CardDetailViewModel = viewModel(factory = CardDetailViewModelFactory(application, cardId))
+            val card by viewModel.card.collectAsState()
             var showDeleteDialog by remember { mutableStateOf(false) }
             var isDark by remember { mutableStateOf(loadThemePref(this@CardDetailActivity)) }
             val context = this@CardDetailActivity
@@ -208,10 +212,6 @@ class CardDetailActivity : ComponentActivity() {
                         showCropDialog = true
                     }
                 }
-            }
-            
-            LaunchedEffect(cardId) {
-                card = withContext(Dispatchers.IO) { dao.getById(cardId)?.toCard() }
             }
             
             LaunchedEffect(card?.frontCoverPath) {
@@ -266,41 +266,16 @@ class CardDetailActivity : ComponentActivity() {
                             frontImageUri = frontImageUri,
                             note = card?.note ?: "",
                             backCoverPath = card?.backCoverPath,
-                            onSaveNote = { newNote ->
-                                scope.launch(Dispatchers.IO) {
-                                    dao.updateNote(cardId, newNote)
-                                    withContext(Dispatchers.Main) { card = card?.copy(note = newNote) }
-                                }
-                            },
-                            onSaveBackCover = { path ->
-                                scope.launch(Dispatchers.IO) {
-                                    dao.updateBackCover(cardId, path)
-                                    withContext(Dispatchers.Main) { card = card?.copy(backCoverPath = path) }
-                                }
-                            },
+                            onSaveNote = { viewModel.updateNote(it) },
+                            onSaveBackCover = { path -> path?.let { viewModel.updateBackCover(it) } },
                             onFrontCoverPick = {
                                 val (intent, cameraUri) = createImagePickerChooserIntent(this@CardDetailActivity)
                                 pendingFrontCameraUri = cameraUri
                                 frontImagePicker.launch(intent)
                             },
                             onBack = { finish() },
-                            onDelete = {
-                                scope.launch(Dispatchers.IO) {
-                                    dao.deleteById(cardId)
-                                    withContext(Dispatchers.Main) {
-                                        setResult(RESULT_OK)
-                                        finish()
-                                    }
-                                }
-                            },
-                            onEdit = { newName, newCode, newType, newColor ->
-                                scope.launch(Dispatchers.IO) {
-                                    val entity = dao.getById(cardId) ?: return@launch
-                                    dao.update(entity.copy(name = newName, code = newCode, type = newType, color = newColor))
-                                    val updated = dao.getById(cardId)?.toCard()
-                                    withContext(Dispatchers.Main) { card = updated }
-                                }
-                            },
+                            onDelete = { showDeleteDialog = true },
+                            onEdit = { newName, newCode, newType, newColor -> viewModel.updateCardFields(newName, newCode, newType, newColor) },
                         topBarContainerColor = Color.Transparent,
                         topBarTextColor = contrastTextColor
                         )
@@ -316,6 +291,7 @@ class CardDetailActivity : ComponentActivity() {
                                 TextButton(
                                     onClick = {
                                         showDeleteDialog = false
+                                        viewModel.deleteCard { setResult(RESULT_OK); finish() }
                                     }
                                 ) {
                                     Text("Удалить", color = Color.Red)
@@ -345,12 +321,7 @@ class CardDetailActivity : ComponentActivity() {
                         val timestamp = System.currentTimeMillis()
                         val fileName = "front_${card?.name}_$timestamp.webp"
                         val path = saveBitmapAsWebp(context, croppedBitmap, fileName)
-                        if (path != null) {
-                            scope.launch(Dispatchers.IO) {
-                                dao.updateFrontCover(cardId, path)
-                                withContext(Dispatchers.Main) { card = card?.copy(frontCoverPath = path) }
-                            }
-                        }
+                        if (path != null) viewModel.updateFrontCover(path)
                         showCropDialog = false
                         cropImageUri = null
                     },
@@ -583,9 +554,9 @@ fun CardDetailScreen(
                         cardName = editName,
                         cardCode = editCode,
                         selectedColor = editColor,
-                        onCardNameChange = { editName = it },
+                        onCardNameChange = { value -> editName = value },
                         onCardCodeChange = {}, // поле не изменяется
-                        onColorChange = { editColor = it },
+                        onColorChange = { color -> editColor = color },
                         onSaveCard = {
                             if (editName.isBlank()) {
                                 editError = "Заполните имя карты"
