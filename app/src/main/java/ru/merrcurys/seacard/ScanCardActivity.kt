@@ -38,10 +38,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import ru.merrcurys.seacard.ui.theme.SeaCardTheme
-import ru.merrcurys.seacard.ui.theme.BlackBackground
-import ru.merrcurys.seacard.ui.theme.GradientBackground
-import ru.merrcurys.seacard.ui.theme.GradientUtils
+import ru.merrcurys.seacard.core.design.SeaCardTheme
+import ru.merrcurys.seacard.core.design.BlackBackground
+import ru.merrcurys.seacard.core.design.GradientBackground
+import ru.merrcurys.seacard.core.design.GradientUtils
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
@@ -52,8 +52,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.content.edit
-import ru.merrcurys.seacard.db.CardEntity
-import ru.merrcurys.seacard.db.DatabaseProvider
+import ru.merrcurys.seacard.core.db.CardEntity
+import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.core.utils.CoverNames
+import ru.merrcurys.seacard.core.utils.createImagePickerChooserIntent
 import android.net.Uri
 import android.os.Build
 import java.io.File

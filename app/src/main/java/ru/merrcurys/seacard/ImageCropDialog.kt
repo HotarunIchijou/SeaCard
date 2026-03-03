@@ -39,7 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.layout.onSizeChanged
-import ru.merrcurys.seacard.ui.theme.SeaCardTheme
+import ru.merrcurys.seacard.core.design.SeaCardTheme
 
 /** Полоска со шкалой градусов: тянем влево/вправо — шкала прокручивается, угол 0..360°. */
 @Composable

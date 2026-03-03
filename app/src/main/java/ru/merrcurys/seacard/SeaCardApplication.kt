@@ -2,7 +2,7 @@ package ru.merrcurys.seacard
 
 import android.app.Application
 import kotlinx.coroutines.runBlocking
-import ru.merrcurys.seacard.db.PrefsToRoomMigration
+import ru.merrcurys.seacard.core.db.PrefsToRoomMigration
 
 class SeaCardApplication : Application() {
     override fun onCreate() {

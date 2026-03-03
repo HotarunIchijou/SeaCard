@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.core.utils
 
 import android.content.Context
 import android.content.Intent

@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ru.merrcurys.seacard.ui.theme.SeaCardTheme
+import ru.merrcurys.seacard.core.design.SeaCardTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
-import ru.merrcurys.seacard.ui.theme.GradientBackground
+import ru.merrcurys.seacard.core.design.GradientBackground
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ArrowDownward
 import android.widget.Toast
@@ -52,15 +52,16 @@ import java.io.InputStreamReader
 import java.io.BufferedReader
 import java.nio.charset.StandardCharsets
 import androidx.compose.foundation.layout.navigationBarsPadding
-import ru.merrcurys.seacard.ui.theme.BerlinAzure
-import ru.merrcurys.seacard.ui.theme.GradientColorOption
-import ru.merrcurys.seacard.ui.theme.rememberGradientState
+import ru.merrcurys.seacard.core.design.BerlinAzure
+import ru.merrcurys.seacard.core.design.GradientColorOption
+import ru.merrcurys.seacard.core.design.rememberGradientState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import ru.merrcurys.seacard.backup.BackupManager
-import ru.merrcurys.seacard.db.CardEntity
-import ru.merrcurys.seacard.db.DatabaseProvider
+import ru.merrcurys.seacard.core.backup.BackupManager
+import ru.merrcurys.seacard.core.db.CardEntity
+import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.core.utils.CoverNames
 
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

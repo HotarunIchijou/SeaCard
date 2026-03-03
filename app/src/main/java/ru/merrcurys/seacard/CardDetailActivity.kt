@@ -38,7 +38,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Close
-import ru.merrcurys.seacard.ui.theme.SeaCardTheme
+import ru.merrcurys.seacard.core.design.SeaCardTheme
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.WriterException
@@ -50,10 +50,12 @@ import androidx.core.content.edit
 import com.google.zxing.datamatrix.encoder.SymbolShapeHint
 import android.graphics.BitmapFactory
 import androidx.compose.ui.draw.shadow
-import ru.merrcurys.seacard.ui.theme.DynamicGradientBackground
+import ru.merrcurys.seacard.core.design.DynamicGradientBackground
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import ru.merrcurys.seacard.db.DatabaseProvider
+import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.core.utils.createImagePickerChooserIntent
+import ru.merrcurys.seacard.domain.entity.Card as CardModel
 import androidx.compose.foundation.BorderStroke
 import androidx.core.graphics.get
 import androidx.compose.foundation.horizontalScroll
@@ -187,7 +189,7 @@ class CardDetailActivity : ComponentActivity() {
         val dao = DatabaseProvider.get(this).cardDao()
         
         setContent {
-            var card by remember { mutableStateOf<Card?>(null) }
+            var card by remember { mutableStateOf<CardModel?>(null) }
             var showDeleteDialog by remember { mutableStateOf(false) }
             var isDark by remember { mutableStateOf(loadThemePref(this@CardDetailActivity)) }
             val context = this@CardDetailActivity

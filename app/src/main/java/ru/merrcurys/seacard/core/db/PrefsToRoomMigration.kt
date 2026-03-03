@@ -1,7 +1,6 @@
-package ru.merrcurys.seacard.db
+package ru.merrcurys.seacard.core.db
 
 import android.content.Context
-import androidx.room.Room
 
 /**
  * Однократная миграция данных из SharedPreferences в Room.

@@ -1,10 +1,10 @@
-package ru.merrcurys.seacard.backup
+package ru.merrcurys.seacard.core.backup
 
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
-import ru.merrcurys.seacard.db.CardEntity
-import ru.merrcurys.seacard.db.DatabaseProvider
+import ru.merrcurys.seacard.core.db.CardEntity
+import ru.merrcurys.seacard.core.db.DatabaseProvider
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -47,13 +47,11 @@ object BackupManager {
                     if (backInZip != null) put("backCoverFile", backInZip)
                 }
                 jsonArray.put(obj)
-                // Копируем лицевую обложку в ZIP
                 card.frontCoverPath?.let { path ->
                     copyCoverToZip(context, path, "${COVERS_DIR}/${index}_front.webp", zip)
                 }
-                // Копируем оборотную обложку в ZIP
                 card.backCoverPath?.let { path ->
-                    if (path.startsWith("cards/")) return@let // back не бывает из assets в текущей логике
+                    if (path.startsWith("cards/")) return@let
                     copyFileToZip(File(path), "${COVERS_DIR}/${index}_back.webp", zip)
                 }
             }

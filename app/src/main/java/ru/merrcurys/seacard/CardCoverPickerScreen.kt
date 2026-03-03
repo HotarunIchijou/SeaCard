@@ -28,7 +28,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.ui.layout.ContentScale
-import ru.merrcurys.seacard.CoverNames.coverNameMap
+import ru.merrcurys.seacard.core.utils.CoverNames.coverNameMap
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextAlign
@@ -36,9 +36,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
-import ru.merrcurys.seacard.ui.theme.BlackBackground
-import ru.merrcurys.seacard.ui.theme.GradientBackground
-import ru.merrcurys.seacard.ui.theme.GradientUtils
+import ru.merrcurys.seacard.core.design.BlackBackground
+import ru.merrcurys.seacard.core.design.GradientBackground
+import ru.merrcurys.seacard.core.design.GradientUtils
 import kotlin.text.substringBeforeLast
 
 @OptIn(ExperimentalMaterial3Api::class)

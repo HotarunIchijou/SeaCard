@@ -39,9 +39,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
-import ru.merrcurys.seacard.ui.theme.SeaCardTheme
-import ru.merrcurys.seacard.ui.theme.GradientBackground
-import ru.merrcurys.seacard.ui.theme.GradientUtils
+import ru.merrcurys.seacard.core.design.SeaCardTheme
+import ru.merrcurys.seacard.core.design.GradientBackground
+import ru.merrcurys.seacard.core.design.GradientUtils
 import java.util.*
 import androidx.core.content.edit
 import androidx.activity.compose.BackHandler
@@ -60,7 +60,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.withContext
-import ru.merrcurys.seacard.db.DatabaseProvider
+import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.domain.entity.Card as CardModel
 import java.text.Collator
 import java.util.Locale
 
@@ -174,7 +175,7 @@ class MainActivity : ComponentActivity() {
         prefs.edit { putString("sort_type", sortType.name) }
     }
     
-    private fun getSortComparator(sortType: SortType): Comparator<Card> {
+    private fun getSortComparator(sortType: SortType): Comparator<CardModel> {
         return when (sortType) {
             SortType.ADD_TIME -> compareByDescending { it.addTime }
             SortType.NAME_ASC -> compareBy(Collator.getInstance(Locale("ru"))) { it.name }
@@ -189,13 +190,13 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
-    cards: List<Card>,
+    cards: List<CardModel>,
     currentSortType: SortType,
     onAddCard: () -> Unit,
-    onCardClick: (Card) -> Unit,
+    onCardClick: (CardModel) -> Unit,
     onSettingsClick: () -> Unit,
     onSortTypeChange: (SortType) -> Unit,
-    onDeleteCards: (List<Card>) -> Unit
+    onDeleteCards: (List<CardModel>) -> Unit
 ) {
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
@@ -205,7 +206,7 @@ fun MainScreen(
         var searchQuery by remember { mutableStateOf("") }
         var showSearch by remember { mutableStateOf(false) }
         var showFilterMenu by remember { mutableStateOf(false) }
-        var selectedCards by remember { mutableStateOf<Set<Card>>(emptySet()) }
+        var selectedCards by remember { mutableStateOf<Set<CardModel>>(emptySet()) }
         var selectionMode by remember { mutableStateOf(false) }
     
         // Функция для определения темного цвета

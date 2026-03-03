@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.domain.entity
 
 /**
  * Модель карточки для UI. Единый вид для всех карточек (все поля всегда присутствуют).

@@ -1,8 +1,8 @@
-package ru.merrcurys.seacard.db
+package ru.merrcurys.seacard.core.db
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import ru.merrcurys.seacard.Card
+import ru.merrcurys.seacard.domain.entity.Card
 
 /**
  * Единая сущность карточки в Room.

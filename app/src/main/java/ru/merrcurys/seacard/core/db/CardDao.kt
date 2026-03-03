@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard.db
+package ru.merrcurys.seacard.core.db
 
 import androidx.room.Dao
 import androidx.room.Delete
