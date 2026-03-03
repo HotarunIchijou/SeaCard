@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.scan
 
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -22,8 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ru.merrcurys.seacard.ui.theme.GradientBackground
-import ru.merrcurys.seacard.ui.theme.GradientUtils
+import ru.merrcurys.seacard.core.design.GradientBackground
+import ru.merrcurys.seacard.core.design.GradientUtils
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image

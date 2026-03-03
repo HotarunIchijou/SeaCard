@@ -1,8 +1,10 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.main
 
-import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import ru.merrcurys.seacard.features.scan.ScanCardActivity
+import ru.merrcurys.seacard.features.detail.CardDetailActivity
+import ru.merrcurys.seacard.features.settings.SettingsActivity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,6 +16,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,208 +41,70 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
-import ru.merrcurys.seacard.ui.theme.SeaCardTheme
-import ru.merrcurys.seacard.ui.theme.GradientBackground
-import ru.merrcurys.seacard.ui.theme.GradientUtils
-import java.util.*
-import androidx.core.content.edit
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import ru.merrcurys.seacard.core.design.SeaCardTheme
+import ru.merrcurys.seacard.core.design.GradientBackground
+import ru.merrcurys.seacard.core.design.GradientUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.runtime.remember
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.TextStyle
-
-enum class SortType(val displayName: String) {
-    ADD_TIME("По времени добавления"),
-    NAME_ASC("По названию (А-Я)"),
-    NAME_DESC("По названию (Я-А)"),
-    USAGE_FREQ("По частоте использования")
-}
-
-data class Card(
-    val name: String, 
-    val code: String, 
-    val type: String,
-    val addTime: Long = System.currentTimeMillis(),
-    val usageCount: Int = 0,
-    val color: Int = 0xFFFFFFFF.toInt(),
-    val coverAsset: String? = null
-)
+import ru.merrcurys.seacard.domain.entity.Card as CardModel
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         setContent {
-            val context = this
-            var cards by remember { mutableStateOf<List<Card>>(emptyList()) }
-            var currentSortType by remember { mutableStateOf(loadSortTypePref(context)) }
-            var showCoverPicker by remember { mutableStateOf(false) }
-            var pendingCoverAsset by remember { mutableStateOf<String?>(null) }
+            val viewModel: MainViewModel = viewModel()
+            val cards by viewModel.cards.collectAsStateWithLifecycle(initialValue = emptyList())
+            val currentSortType by viewModel.sortType.collectAsStateWithLifecycle()
+            val showCoverPicker by viewModel.showCoverPicker.collectAsStateWithLifecycle()
 
-            // Функция загрузки карт
-            fun loadCards() {
-                val prefs = getSharedPreferences("cards", Context.MODE_PRIVATE)
-                val cardSet = prefs.getStringSet("card_list", setOf()) ?: setOf()
-                cards = cardSet.mapNotNull { cardString ->
-                    val parts = cardString.split("|")
-                    when (parts.size) {
-                        2 -> Card(parts[0], parts[1], "barcode")
-                        3 -> Card(parts[0], parts[1], parts[2])
-                        5 -> Card(parts[0], parts[1], parts[2], parts[3].toLongOrNull() ?: System.currentTimeMillis(), parts[4].toIntOrNull() ?: 0)
-                        6 -> Card(parts[0], parts[1], parts[2], parts[3].toLongOrNull() ?: System.currentTimeMillis(), parts[4].toIntOrNull() ?: 0, parts[5].toIntOrNull() ?: 0xFFFFFFFF.toInt())
-                        7 -> Card(
-                            parts[0],
-                            parts[1],
-                            parts[2],
-                            parts[3].toLongOrNull() ?: System.currentTimeMillis(),
-                            parts[4].toIntOrNull() ?: 0, // usageCount
-                            parts[5].toIntOrNull() ?: 0xFFFFFFFF.toInt(), // color
-                            parts[6].takeIf { it.isNotBlank() } // coverAsset
-                        )
-                        else -> null
-                    }
-                }.sortedWith(getSortComparator(currentSortType))
-            }
+            val scanCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+            val cardDetailLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+            val settingsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+            val context = this@MainActivity
 
-            val scanCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                if (result.resultCode == RESULT_OK) {
-                    loadCards()
-                }
-            }
-
-            val cardDetailLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                if (result.resultCode == RESULT_OK) {
-                    loadCards()
-                }
-            }
-
-            val settingsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-                // Обновляем градиент при возвращении из настроек
-                loadCards()
-            }
-            
-            // Функция обновления частоты использования карты
-            fun updateCardUsage(cardName: String) {
-                val prefs = getSharedPreferences("cards", Context.MODE_PRIVATE)
-                val cardSet = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-                
-                val updatedCardSet = cardSet.map { cardString ->
-                    val parts = cardString.split("|")
-                    if (parts[0] == cardName) {
-                        when (parts.size) {
-                            2 -> "${parts[0]}|${parts[1]}|barcode|${System.currentTimeMillis()}|1|${0xFFFFFFFF.toInt()}"
-                            3 -> "${parts[0]}|${parts[1]}|${parts[2]}|${System.currentTimeMillis()}|1|${0xFFFFFFFF.toInt()}"
-                            5 -> "${parts[0]}|${parts[1]}|${parts[2]}|${parts[3]}|${(parts[4].toIntOrNull() ?: 0) + 1}|${0xFFFFFFFF.toInt()}"
-                            6 -> "${parts[0]}|${parts[1]}|${parts[2]}|${parts[3]}|${(parts[4].toIntOrNull() ?: 0) + 1}|${parts[5]}"
-                            7 -> "${parts[0]}|${parts[1]}|${parts[2]}|${parts[3]}|${(parts[4].toIntOrNull() ?: 0) + 1}|${parts[5]}|${parts[6]}"
-                            else -> cardString
-                        }
-                    } else {
-                        cardString
-                    }
-                }.toSet()
-                
-                prefs.edit { putStringSet("card_list", updatedCardSet) }
-                loadCards()
-            }
-            
             LaunchedEffect(Unit) {
                 val window = this@MainActivity.window
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
-                loadCards()
             }
-            
+
             SeaCardTheme {
                 if (showCoverPicker) {
                     CardCoverPickerScreen(
                         onCoverSelected = { coverAsset: String? ->
-                            showCoverPicker = false
-                            pendingCoverAsset = coverAsset
-                            val intent = Intent(this@MainActivity, ScanCardActivity::class.java)
-                            if (coverAsset != null) intent.putExtra("cover_asset", coverAsset as String)
+                            viewModel.setShowCoverPicker(false)
+                            val intent = Intent(context, ScanCardActivity::class.java)
+                            if (coverAsset != null) intent.putExtra("cover_asset", coverAsset)
                             scanCardLauncher.launch(intent)
                         },
-                        onBack = {
-                            showCoverPicker = false
-                        }
+                        onBack = { viewModel.setShowCoverPicker(false) }
                     )
                 } else {
                     MainScreen(
                         cards = cards,
                         currentSortType = currentSortType,
-                        onAddCard = {
-                            showCoverPicker = true
-                        },
+                        onAddCard = { viewModel.setShowCoverPicker(true) },
                         onCardClick = { card ->
-                            updateCardUsage(card.name)
-                            val intent = Intent(this@MainActivity, CardDetailActivity::class.java).apply {
-                                putExtra("card_name", card.name)
-                                putExtra("card_code", card.code)
-                                putExtra("code_type", card.type)
-                                putExtra("card_color", card.color)
-                                putExtra("cover_asset", card.coverAsset)
-                            }
-                            cardDetailLauncher.launch(intent)
+                            viewModel.updateCardUsage(card.id)
+                            cardDetailLauncher.launch(Intent(context, CardDetailActivity::class.java).apply { putExtra("card_id", card.id) })
                         },
-                        onSettingsClick = {
-                            settingsLauncher.launch(Intent(context, SettingsActivity::class.java))
-                        },
-                        onSortTypeChange = { newSortType ->
-                            currentSortType = newSortType
-                            saveSortTypePref(context, newSortType)
-                            loadCards()
-                        },
-                        onDeleteCards = { cardsToDelete ->
-                            val prefs = getSharedPreferences("cards", MODE_PRIVATE)
-                            val cardSet = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-                            val updatedCardSet = cardSet.filterNot { cardString ->
-                                val parts = cardString.split("|")
-                                cardsToDelete.any { card ->
-                                    parts.getOrNull(0) == card.name &&
-                                    parts.getOrNull(1) == card.code &&
-                                    parts.getOrNull(2) == card.type &&
-                                    (parts.size < 6 || parts.getOrNull(5)?.toIntOrNull() == card.color) &&
-                                    (parts.size < 7 || parts.getOrNull(6) == card.coverAsset)
-                                }
-                            }.toSet()
-                            prefs.edit { putStringSet("card_list", updatedCardSet) }
-                            loadCards()
-                        }
+                        onSettingsClick = { settingsLauncher.launch(Intent(context, SettingsActivity::class.java)) },
+                        onSortTypeChange = { viewModel.setSortType(it) },
+                        onDeleteCards = { viewModel.deleteCards(it) }
                     )
                 }
             }
-        }
-    }
-    
-    private fun loadSortTypePref(context: Context): SortType {
-        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val sortTypeName = prefs.getString("sort_type", SortType.ADD_TIME.name)
-        return try {
-            SortType.valueOf(sortTypeName ?: SortType.ADD_TIME.name)
-        } catch (e: IllegalArgumentException) {
-            SortType.ADD_TIME
-        }
-    }
-    
-    private fun saveSortTypePref(context: Context, sortType: SortType) {
-        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        prefs.edit { putString("sort_type", sortType.name) }
-    }
-    
-    private fun getSortComparator(sortType: SortType): Comparator<Card> {
-        return when (sortType) {
-            SortType.ADD_TIME -> compareByDescending { it.addTime }
-            SortType.NAME_ASC -> compareBy { it.name.lowercase() }
-            SortType.NAME_DESC -> compareByDescending { it.name.lowercase() }
-            SortType.USAGE_FREQ -> compareByDescending { it.usageCount }
         }
     }
 }
@@ -247,13 +112,13 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
-    cards: List<Card>,
+    cards: List<CardModel>,
     currentSortType: SortType,
     onAddCard: () -> Unit,
-    onCardClick: (Card) -> Unit,
+    onCardClick: (CardModel) -> Unit,
     onSettingsClick: () -> Unit,
     onSortTypeChange: (SortType) -> Unit,
-    onDeleteCards: (List<Card>) -> Unit
+    onDeleteCards: (List<CardModel>) -> Unit
 ) {
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
@@ -263,7 +128,7 @@ fun MainScreen(
         var searchQuery by remember { mutableStateOf("") }
         var showSearch by remember { mutableStateOf(false) }
         var showFilterMenu by remember { mutableStateOf(false) }
-        var selectedCards by remember { mutableStateOf<Set<Card>>(emptySet()) }
+        var selectedCards by remember { mutableStateOf<Set<CardModel>>(emptySet()) }
         var selectionMode by remember { mutableStateOf(false) }
     
         // Функция для определения темного цвета
@@ -466,9 +331,10 @@ fun MainScreen(
                             contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 80.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            flingBehavior = ScrollableDefaults.flingBehavior(),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(filteredCards) { card ->
+                            items(filteredCards, key = { it.id }) { card ->
                                 val isSelected = selectedCards.contains(card)
                                 Card(
                                     colors = CardDefaults.cardColors(
@@ -507,8 +373,7 @@ fun MainScreen(
                                         )
                                 ) {
                                     val context = LocalContext.current
-                                    val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-                                    val frontPath = prefs.getString("cover_front_${card.name}_${card.code}", null)
+                                    val frontPath = card.frontCoverPath
                                     key(frontPath) {
                                         Box(
                                             modifier = Modifier.fillMaxSize(),

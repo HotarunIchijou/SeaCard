@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.settings
 
 import android.content.Context
 import android.os.Bundle
@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ru.merrcurys.seacard.ui.theme.SeaCardTheme
+import ru.merrcurys.seacard.core.design.SeaCardTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,36 +41,44 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
-import ru.merrcurys.seacard.ui.theme.GradientBackground
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.collectAsState
+import ru.merrcurys.seacard.core.design.GradientBackground
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ArrowDownward
 import android.widget.Toast
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
-import java.io.OutputStreamWriter
 import java.io.InputStreamReader
-import java.io.BufferedReader
+import java.nio.charset.StandardCharsets
 import androidx.compose.foundation.layout.navigationBarsPadding
-import ru.merrcurys.seacard.ui.theme.BerlinAzure
-import ru.merrcurys.seacard.ui.theme.GradientColorOption
-import ru.merrcurys.seacard.ui.theme.rememberGradientState
+import ru.merrcurys.seacard.BuildConfig
+import ru.merrcurys.seacard.core.design.BerlinAzure
+import ru.merrcurys.seacard.core.design.GradientColorOption
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import ru.merrcurys.seacard.core.backup.BackupManager
+import ru.merrcurys.seacard.core.db.CardEntity
+import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.core.utils.CoverNames
 
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         var exportCards: (() -> Unit)? = null
         var importCards: (() -> Unit)? = null
-        val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
+        val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
             if (uri != null) {
                 try {
-                    val prefs = getSharedPreferences("cards", Context.MODE_PRIVATE)
-                    val cardSet = prefs.getStringSet("card_list", setOf()) ?: setOf()
-                    contentResolver.openOutputStream(uri)?.use { out ->
-                        OutputStreamWriter(out).use { writer ->
-                            cardSet.forEach { writer.write(it + "\n") }
+                    runBlocking(Dispatchers.IO) {
+                        val dao = DatabaseProvider.get(this@SettingsActivity).cardDao()
+                        val cards = dao.getAll()
+                        contentResolver.openOutputStream(uri)?.use { out ->
+                            BackupManager.exportToZip(this@SettingsActivity, cards, out)
                         }
                     }
-                    Toast.makeText(this, "Карточки экспортированы", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Бэкап экспортирован (карточки и обложки)", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     Toast.makeText(this, "Ошибка экспорта: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                 }
@@ -78,88 +86,41 @@ class SettingsActivity : ComponentActivity() {
         }
         val importLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             if (uri != null) {
-                val prefs = getSharedPreferences("cards", Context.MODE_PRIVATE)
-                val cardSet = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-                val assetList = assets.list("cards")?.toSet() ?: emptySet()
-                val importedNames = mutableListOf<String>()
-                val errors = mutableListOf<String>()
                 try {
-                    contentResolver.openInputStream(uri)?.use { input ->
-                        BufferedReader(InputStreamReader(input)).useLines { lines ->
-                            // Собираем уже существующие карточки по ключу (name, code, type)
-                            val existingKeys = cardSet.map { s ->
-                                val p = s.split("|")
-                                Triple(p.getOrNull(0), p.getOrNull(1), p.getOrNull(2))
-                            }.toMutableSet()
-                            lines.forEach { line ->
-                                val parts = line.split("|")
-                                if (parts.size >= 2) {
-                                    val name = parts[0]
-                                    val code = parts[1]
-                                    val type = parts.getOrNull(2) ?: "barcode"
-                                    val cardKey = Triple(name, code, type)
-                                    if (existingKeys.contains(cardKey)) {
-                                        // Уже есть такая карта — пропускаем
-                                        return@forEach
-                                    }
-                                    val coverAsset = if (parts.size >= 7) parts[6] else null
-                                    val fixedCover = if (coverAsset != null && coverAsset.startsWith("cards/") && assetList.contains(coverAsset.removePrefix("cards/"))) {
-                                        coverAsset
-                                    } else {
-                                        val found = CoverNames.coverNameMap.entries.find { it.value.equals(name, ignoreCase = true) }?.key
-                                        if (found != null) "cards/$found" else null
-                                    }
-                                    val newLine = if (fixedCover != null) {
-                                        parts.take(6).joinToString("|") + "|" + fixedCover
-                                    } else if (parts.size >= 7) {
-                                        parts.take(6).joinToString("|")
-                                    } else {
-                                        line
-                                    }
-                                    try {
-                                        cardSet.add(newLine)
-                                        existingKeys.add(cardKey)
-                                        importedNames.add(name)
-                                    } catch (e: Exception) {
-                                        errors.add(name)
-                                    }
-                                } else {
-                                    errors.add(line)
-                                }
+                    val result = runBlocking(Dispatchers.IO) {
+                        contentResolver.openInputStream(uri)?.use { input ->
+                            val bytes = input.readBytes()
+                            if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
+                                BackupManager.importFromZip(this@SettingsActivity, bytes.inputStream())
+                            } else {
+                                importLegacyTxt(this@SettingsActivity, String(bytes, StandardCharsets.UTF_8))
                             }
-                        }
+                        } ?: Pair(0, listOf("Не удалось открыть файл"))
                     }
-                    prefs.edit { putStringSet("card_list", cardSet) }
+                    val (imported, errors) = result
                     if (errors.isEmpty()) {
-                        Toast.makeText(this, "Все карты были скопированы", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, "Импортировано карт: $imported", Toast.LENGTH_LONG).show()
                     } else {
-                        errors.forEach { name ->
-                            Toast.makeText(this, "Ошибка при копировании карты $name", Toast.LENGTH_LONG).show()
-                        }
+                        Toast.makeText(this, "Импортировано: $imported. Ошибки: ${errors.take(3).joinToString()}", Toast.LENGTH_LONG).show()
                     }
                 } catch (e: Exception) {
                     Toast.makeText(this, "Ошибка импорта: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                 }
             }
         }
-        exportCards = { exportLauncher.launch("seacard_cards.txt") }
-        importCards = { importLauncher.launch("text/plain") }
+        exportCards = { exportLauncher.launch("seacard_backup.zip") }
+        importCards = { importLauncher.launch("*/*") }
         setContent {
-            val context = this
-            // Always use dark theme
-            val gradientState = rememberGradientState(context)
+            val viewModel: SettingsViewModel = viewModel()
+            val gradientColor by viewModel.gradientColor.collectAsState(initial = ru.merrcurys.seacard.core.design.BerlinAzure)
             LaunchedEffect(Unit) {
-                val window = this@SettingsActivity.window
-                WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+                WindowCompat.getInsetsController(this@SettingsActivity.window, this@SettingsActivity.window.decorView).isAppearanceLightStatusBars = false
             }
             SeaCardTheme {
-                GradientBackground(gradientColor = gradientState.gradientColor) {
+                GradientBackground(gradientColor = gradientColor) {
                     SettingsScreen(
-                        gradientColor = gradientState.gradientColor,
-                        onGradientColorChange = { color ->
-                            gradientState.updateGradientColor(color)
-                            saveGradientColorPref(context, color)
-                        },
+                        gradientColor = gradientColor,
+                        onGradientColorChange = { viewModel.setGradientColor(it) },
                         onBack = { finish() },
                         topBarContainerColor = Color.Transparent,
                         onExport = { exportCards?.invoke() },
@@ -169,11 +130,52 @@ class SettingsActivity : ComponentActivity() {
             }
         }
     }
+}
 
-    private fun saveGradientColorPref(context: Context, color: Color) {
-        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        prefs.edit { putInt("gradient_color", color.hashCode()) }
+/** Импорт из старого формата TXT (построчно name|code|type|...). Без обложек. */
+private suspend fun importLegacyTxt(context: Context, content: String): Pair<Int, List<String>> {
+    val dao = DatabaseProvider.get(context).cardDao()
+    val assetList = context.assets.list("cards")?.toSet() ?: emptySet()
+    val errors = mutableListOf<String>()
+    var imported = 0
+    content.lines().forEach { line ->
+        val parts = line.split("|")
+        if (parts.size >= 2) {
+            val name = parts[0]
+            val code = parts[1]
+            val type = parts.getOrNull(2) ?: "barcode"
+            if (dao.getByNameCodeType(name, code, type) != null) return@forEach
+            val coverAsset = if (parts.size >= 7) parts[6] else null
+            val fixedCover = if (coverAsset != null && coverAsset.startsWith("cards/") && assetList.contains(coverAsset.removePrefix("cards/"))) {
+                coverAsset
+            } else {
+                val found = CoverNames.coverNameMap.entries.find { it.value.equals(name, ignoreCase = true) }?.key
+                if (found != null) "cards/$found" else null
+            }
+            val addTime = parts.getOrNull(3)?.toLongOrNull() ?: System.currentTimeMillis()
+            val usageCount = parts.getOrNull(4)?.toIntOrNull() ?: 0
+            val color = parts.getOrNull(5)?.toIntOrNull() ?: 0xFFFFFFFF.toInt()
+            try {
+                dao.insert(CardEntity(
+                    name = name,
+                    code = code,
+                    type = type,
+                    addTime = addTime,
+                    usageCount = usageCount,
+                    color = color,
+                    frontCoverPath = fixedCover,
+                    backCoverPath = null,
+                    note = null
+                ))
+                imported++
+            } catch (e: Exception) {
+                errors.add(name)
+            }
+        } else if (line.isNotBlank()) {
+            errors.add(line)
+        }
     }
+    return Pair(imported, errors)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -239,7 +241,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        GradientColorOption.values().forEach { option ->
+                        for (option in GradientColorOption.values()) {
                             val isSelected = gradientColor == option.color
                             Box(
                                 modifier = Modifier
@@ -364,9 +366,9 @@ fun SettingsScreen(
                 confirmButton = {
                     androidx.compose.material3.TextButton(
                         onClick = {
-                            // Удаляем все карточки
-                            val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-                            prefs.edit { remove("card_list") }
+                            runBlocking(Dispatchers.IO) {
+                                DatabaseProvider.get(context).cardDao().deleteAll()
+                            }
                             showDeleteDialog = false
                             onBack()
                         }

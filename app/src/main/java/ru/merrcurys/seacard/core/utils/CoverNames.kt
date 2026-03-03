@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.core.utils
 
 object CoverNames {
     val coverNameMap = mapOf(
@@ -243,6 +243,5 @@ object CoverNames {
         "zenden.webp" to "ZENDEN",
         "zdravsity.webp" to "Здравсити",
         "zolotoeyabloco.webp" to "Золотое Яблоко"
-
     )
 }

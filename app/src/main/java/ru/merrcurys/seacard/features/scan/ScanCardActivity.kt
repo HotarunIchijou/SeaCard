@@ -1,6 +1,8 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.scan
 
+import android.app.Application
 import android.Manifest
+import ru.merrcurys.seacard.features.crop.ImageCropDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -12,6 +14,7 @@ import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,18 +41,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import ru.merrcurys.seacard.ui.theme.SeaCardTheme
-import ru.merrcurys.seacard.ui.theme.BlackBackground
-import ru.merrcurys.seacard.ui.theme.GradientBackground
-import ru.merrcurys.seacard.ui.theme.GradientUtils
+import ru.merrcurys.seacard.core.design.SeaCardTheme
+import ru.merrcurys.seacard.core.design.BlackBackground
+import ru.merrcurys.seacard.core.design.GradientBackground
+import ru.merrcurys.seacard.core.design.GradientUtils
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.core.content.edit
+import kotlinx.coroutines.withContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import ru.merrcurys.seacard.core.utils.createImagePickerChooserIntent
 import android.net.Uri
 import android.os.Build
 import java.io.File
@@ -56,70 +63,56 @@ import java.io.FileOutputStream
 
 class ScanCardActivity : ComponentActivity() {
     private lateinit var cameraExecutor: ExecutorService
-    private var scannedCodeType: String = "barcode"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         cameraExecutor = Executors.newSingleThreadExecutor()
-        val coverAsset: String? = intent.getStringExtra("cover_asset")
-        
+        val coverAsset = intent.getStringExtra("cover_asset")
+
         setContent {
             var hasCameraPermission by remember { mutableStateOf(false) }
-            val initialCardName = coverAsset?.let {
-                val fileName = it.substringAfterLast('/')
-                CoverNames.coverNameMap[fileName] ?: fileName.substringBeforeLast('.')
-            } ?: ""
-            var cardName by remember { mutableStateOf(initialCardName) }
-            var cardCode by remember { mutableStateOf("") }
-            var scanSuccess by remember { mutableStateOf(false) }
-            var selectedColor by remember { mutableStateOf(0xFFFFFFFF.toInt()) }
-            var scanned by remember { mutableStateOf(false) }
-            var cardSaved by remember { mutableStateOf(false) }
-            var codeTypeState by remember { mutableStateOf("") }
-
-            // Новое: состояния для Uri обложек
-            var frontCoverUri by remember { mutableStateOf<android.net.Uri?>(null) }
-            var backCoverUri by remember { mutableStateOf<android.net.Uri?>(null) }
-            // Новое: состояния для crop-диалога
-            var showFrontCropDialog by remember { mutableStateOf(false) }
-            var showBackCropDialog by remember { mutableStateOf(false) }
-            var frontCropImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
-            var backCropImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+            val viewModel: ScanCardViewModel = viewModel(
+                factory = ScanCardViewModelFactory(application, coverAsset)
+            )
+            val cardName by viewModel.cardName.collectAsState()
+            val cardCode by viewModel.cardCode.collectAsState()
+            val selectedColor by viewModel.selectedColor.collectAsState()
+            val scanned by viewModel.scanned.collectAsState()
+            val scanSuccess by viewModel.scanSuccess.collectAsState()
+            val codeTypeState by viewModel.codeTypeState.collectAsState()
+            val frontCoverUri by viewModel.frontCoverUri.collectAsState()
+            val backCoverUri by viewModel.backCoverUri.collectAsState()
+            val showFrontCropDialog by viewModel.showFrontCropDialog.collectAsState()
+            val showBackCropDialog by viewModel.showBackCropDialog.collectAsState()
+            val frontCropImageUri by viewModel.frontCropImageUri.collectAsState()
+            val backCropImageUri by viewModel.backCropImageUri.collectAsState()
 
             val context = this@ScanCardActivity
             val coroutineScope = rememberCoroutineScope()
 
-            // Launcher для выбора лицевой обложки
-            val frontCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                if (uri != null) {
-                    frontCropImageUri = uri
-                    showFrontCropDialog = true
+            var pendingFrontCameraUri by remember { mutableStateOf<Uri?>(null) }
+            var pendingBackCameraUri by remember { mutableStateOf<Uri?>(null) }
+            val frontCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val uri = result.data?.data ?: pendingFrontCameraUri
+                    pendingFrontCameraUri = null
+                    uri?.let { viewModel.showFrontCrop(it) }
                 }
             }
-            // Launcher для выбора тыльной обложки
-            val backCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                if (uri != null) {
-                    backCropImageUri = uri
-                    showBackCropDialog = true
+            val backCoverPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val uri = result.data?.data ?: pendingBackCameraUri
+                    pendingBackCameraUri = null
+                    uri?.let { viewModel.showBackCrop(it) }
                 }
             }
 
-            // Launcher для запроса разрешения на камеру
-            val launcher = rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestPermission()
-            ) { isGranted ->
-                hasCameraPermission = isGranted
-            }
-
-            // Launcher для выбора изображения из галереи
-            val galleryLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.GetContent()
-            ) { uri ->
+            val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { hasCameraPermission = it }
+            val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
                 if (uri != null) {
                     try {
                         val image = InputImage.fromFilePath(context, uri)
-                        val scanner = BarcodeScanning.getClient()
-                        scanner.process(image)
+                        BarcodeScanning.getClient().process(image)
                             .addOnSuccessListener { barcodes ->
                                 var found = false
                                 for (barcode in barcodes) {
@@ -139,71 +132,46 @@ class ScanCardActivity : ComponentActivity() {
                                         Barcode.FORMAT_UPC_E -> "upce"
                                         else -> "barcode"
                                     }
-                                    if (!scanned) {
-                                        cardCode = barcode.rawValue ?: ""
-                                        codeTypeState = codeType
-                                        scannedCodeType = codeType
-                                        scanSuccess = true
-                                        scanned = true
+                                    if (!viewModel.scanned.value) {
+                                        viewModel.onScanResult(barcode.rawValue ?: "", codeType)
                                         found = true
-                                        // Вибрация при успешном сканировании
-                                        val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                                            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                                            vibratorManager.defaultVibrator
+                                        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                            (getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
                                         } else {
                                             @Suppress("DEPRECATION")
-                                            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                                            getSystemService(VIBRATOR_SERVICE) as Vibrator
                                         }
                                         vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
                                         coroutineScope.launch {
                                             delay(2000)
-                                            scanSuccess = false
+                                            viewModel.setScanSuccess(false)
                                         }
                                         break
                                     }
                                 }
-                                if (!found) {
-                                    android.widget.Toast.makeText(context, "Код не был найден", android.widget.Toast.LENGTH_SHORT).show()
-                                }
+                                if (!found) android.widget.Toast.makeText(context, "Код не был найден", android.widget.Toast.LENGTH_SHORT).show()
                             }
-                            .addOnFailureListener { e ->
-                                android.widget.Toast.makeText(context, "Ошибка сканирования: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                            }
+                            .addOnFailureListener { e -> android.widget.Toast.makeText(context, "Ошибка сканирования: ${e.message}", android.widget.Toast.LENGTH_SHORT).show() }
                     } catch (e: Exception) {
-                        e.printStackTrace()
                         android.widget.Toast.makeText(context, "Ошибка загрузки изображения", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
             }
-            
+
             LaunchedEffect(Unit) {
-                when (PackageManager.PERMISSION_GRANTED) {
-                    ContextCompat.checkSelfPermission(
-                        this@ScanCardActivity,
-                        Manifest.permission.CAMERA
-                    ) -> {
-                        hasCameraPermission = true
-                    }
-                    else -> {
-                        launcher.launch(Manifest.permission.CAMERA)
-                    }
-                }
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) hasCameraPermission = true
+                else permissionLauncher.launch(Manifest.permission.CAMERA)
             }
-            
-            if (coverAsset != null) {
-                LaunchedEffect(cardCode) {
-                    if (!cardSaved && cardName.isNotBlank() && cardCode.isNotBlank()) {
-                        saveCardWithCover(this@ScanCardActivity, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, coverAsset)
-                        cardSaved = true
-                        setResult(RESULT_OK)
-                        finish()
-                    }
+
+            LaunchedEffect(cardCode, viewModel.cardSaved.value) {
+                if (viewModel.saveIfCoverAssetReady()) {
+                    setResult(RESULT_OK)
+                    finish()
                 }
             }
 
             SeaCardTheme {
-                val gradientColor = GradientUtils.loadGradientColorPref(this)
-                GradientBackground(gradientColor = gradientColor) {
+                GradientBackground(gradientColor = GradientUtils.loadGradientColorPref(context)) {
                     if (cardCode.isBlank()) {
                         ScanCardScreen(
                             hasCameraPermission = hasCameraPermission,
@@ -212,176 +180,88 @@ class ScanCardActivity : ComponentActivity() {
                             cardCode = cardCode,
                             scanSuccess = scanSuccess,
                             selectedColor = selectedColor,
-                            onCardNameChange = { cardName = it },
-                            onCardCodeChange = { newCode -> cardCode = newCode },
-                            onColorChange = { selectedColor = it },
-                            onScanResult = { code, codeType ->
-                                if (!scanned) {
-                                    cardCode = code
-                                    codeTypeState = codeType
-                                    scanSuccess = true
-                                    scanned = true
-                                    // Вибрация при успешном сканировании
-                                    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                                        vibratorManager.defaultVibrator
-                                    } else {
-                                        @Suppress("DEPRECATION")
-                                        getSystemService(VIBRATOR_SERVICE) as Vibrator
-                                    }
-                                    vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
-                                }
-                            },
+                            onCardNameChange = { viewModel.setCardName(it) },
+                            onCardCodeChange = { viewModel.setCardCode(it) },
+                            onColorChange = { viewModel.setSelectedColor(it) },
+                            onScanResult = viewModel::onScanResult,
                             onSaveCard = {
                                 if (cardName.isNotBlank() && cardCode.isNotBlank()) {
-                                    saveCardWithCover(this@ScanCardActivity, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, if (coverAsset != null) coverAsset else null)
-                                    setResult(RESULT_OK)
-                                    finish()
+                                    coroutineScope.launch {
+                                        viewModel.saveCardWithCover(cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, viewModel.coverAsset, null)
+                                        setResult(RESULT_OK)
+                                        finish()
+                                    }
                                 }
                             },
                             onBack = { finish() },
                             onGalleryClick = { galleryLauncher.launch("image/*") },
-                            coverAsset = coverAsset
+                            coverAsset = viewModel.coverAsset
                         )
                     } else {
-                        // Ручной ввод
                         CardInputSection(
                             cardName = cardName,
                             cardCode = cardCode,
                             selectedColor = selectedColor,
-                            onCardNameChange = { cardName = it },
+                            onCardNameChange = { viewModel.setCardName(it) },
                             onCardCodeChange = {},
-                            onColorChange = { selectedColor = it },
+                            onColorChange = { viewModel.setSelectedColor(it) },
                             onSaveCard = {
                                 if (cardName.isNotBlank() && cardCode.isNotBlank()) {
-                                    // Сохраняем обложки в webp
-                                    var frontPath: String? = null
-                                    var backPath: String? = null
-                                    frontCoverUri?.let { uri ->
-                                        val input = context.contentResolver.openInputStream(uri)
-                                        val bmp = BitmapFactory.decodeStream(input)
-                                        input?.close()
-                                        if (bmp != null) {
-                                            val timestamp = System.currentTimeMillis()
-                                            val fileName = "front_${cardName}_$timestamp.webp"
-                                            frontPath = saveBitmapAsWebp(context, bmp, fileName)
-                                        }
+                                    coroutineScope.launch {
+                                        viewModel.saveCardWithCoverUris(cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor)
+                                        setResult(RESULT_OK)
+                                        finish()
                                     }
-                                    backCoverUri?.let { uri ->
-                                        val input = context.contentResolver.openInputStream(uri)
-                                        val bmp = BitmapFactory.decodeStream(input)
-                                        input?.close()
-                                        if (bmp != null) {
-                                            val timestamp = System.currentTimeMillis()
-                                            val fileName = "back_${cardName}_$timestamp.webp"
-                                            backPath = saveBitmapAsWebp(context, bmp, fileName)
-                                        }
-                                    }
-                                    // Сохраняем пути в SharedPreferences
-                                    val prefs = context.getSharedPreferences("cards", MODE_PRIVATE)
-                                    if (frontPath != null) {
-                                        prefs.edit { putString("cover_front_${cardName}_${cardCode}", frontPath) }
-                                    }
-                                    if (backPath != null) {
-                                        prefs.edit { putString("cover_back_${cardName}_${cardCode}", backPath) }
-                                    }
-                                    // Сохраняем карту: путь к лицевой обложке как coverAsset
-                                    saveCardWithCover(context, cardName, cardCode, codeTypeState.ifBlank { "barcode" }, selectedColor, frontPath)
-                                    setResult(RESULT_OK)
-                                    finish()
                                 }
                             },
                             coverAsset = null,
                             onBack = { finish() },
                             frontCoverUri = frontCoverUri,
                             backCoverUri = backCoverUri,
-                            onFrontCoverPick = { frontCoverPicker.launch("image/*") },
-                            onBackCoverPick = { backCoverPicker.launch("image/*") },
-                            onFrontCoverRemove = { frontCoverUri = null },
-                            onBackCoverRemove = { backCoverUri = null }
+                            onFrontCoverPick = {
+                                val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
+                                pendingFrontCameraUri = cameraUri
+                                frontCoverPicker.launch(intent)
+                            },
+                            onBackCoverPick = {
+                                val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
+                                pendingBackCameraUri = cameraUri
+                                backCoverPicker.launch(intent)
+                            },
+                            onFrontCoverRemove = { viewModel.setFrontCoverUri(null) },
+                            onBackCoverRemove = { viewModel.setBackCoverUri(null) }
                         )
                     }
                 }
             }
-            // Показываем crop-диалоги если нужно
+
             if (showFrontCropDialog && frontCropImageUri != null) {
                 ImageCropDialog(
                     imageUri = frontCropImageUri!!,
                     aspectRatio = 1.574f,
-                    onCrop = { croppedBitmap ->
-                        // Сохраняем bitmap во временный файл и обновляем frontCoverUri
-                        val file = File.createTempFile("front_crop_", ".webp", context.cacheDir)
-                        FileOutputStream(file).use { out ->
-                            croppedBitmap.compress(Bitmap.CompressFormat.WEBP, 90, out)
-                        }
-                        frontCoverUri = Uri.fromFile(file)
-                        showFrontCropDialog = false
-                        frontCropImageUri = null
-                    },
-                    onDismiss = {
-                        showFrontCropDialog = false
-                        frontCropImageUri = null
-                    }
+                    onCrop = { viewModel.onFrontCropResult(it) },
+                    onDismiss = { viewModel.dismissFrontCrop() }
                 )
             }
             if (showBackCropDialog && backCropImageUri != null) {
                 ImageCropDialog(
                     imageUri = backCropImageUri!!,
                     aspectRatio = 1.574f,
-                    onCrop = { croppedBitmap ->
-                        val file = File.createTempFile("back_crop_", ".webp", context.cacheDir)
-                        FileOutputStream(file).use { out ->
-                            croppedBitmap.compress(Bitmap.CompressFormat.WEBP, 90, out)
-                        }
-                        backCoverUri = Uri.fromFile(file)
-                        showBackCropDialog = false
-                        backCropImageUri = null
-                    },
-                    onDismiss = {
-                        showBackCropDialog = false
-                        backCropImageUri = null
-                    }
+                    onCrop = { viewModel.onBackCropResult(it) },
+                    onDismiss = { viewModel.dismissBackCrop() }
                 )
             }
         }
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
     }
-    
-    private fun saveCard(context: Context, name: String, code: String, codeType: String, color: Int) {
-        val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-        val cards = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-        val currentTime = System.currentTimeMillis()
-        cards.add("$name|$code|$codeType|$currentTime|0|$color")
-        prefs.edit { putStringSet("card_list", cards) }
-    }
+}
 
-    private fun saveCardWithCover(context: Context, name: String, code: String, codeType: String, color: Int, coverAsset: String?) {
-        val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-        val cards = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-        val currentTime = System.currentTimeMillis()
-        if (coverAsset != null) {
-            cards.add("$name|$code|$codeType|$currentTime|0|$color|$coverAsset")
-        } else {
-            cards.add("$name|$code|$codeType|$currentTime|0|$color")
-        }
-        prefs.edit { putStringSet("card_list", cards) }
-    }
-
-    companion object {
-        fun detectCodeType(code: String): String {
-            return when {
-                code.all { it.isDigit() } && code.length == 13 -> "ean13"
-                code.all { it.isDigit() } && code.length == 12 -> "upca"
-                code.all { it.isDigit() } && code.length == 8 -> "ean8"
-                code.all { it.isDigit() } -> "code128"
-                else -> "qr"
-            }
-        }
-    }
+class ScanCardViewModelFactory(private val application: Application, private val coverAsset: String?) : androidx.lifecycle.ViewModelProvider.Factory {
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T = ScanCardViewModel(application, coverAsset) as T
 }
 
 @Composable

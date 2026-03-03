@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard.ui.theme
+package ru.merrcurys.seacard.core.design
 
 import android.content.Context
 import androidx.compose.runtime.*
@@ -14,7 +14,7 @@ object GradientUtils {
 
 class GradientState(initialColor: Color) {
     var gradientColor by mutableStateOf(initialColor)
-    
+
     fun updateGradientColor(newColor: Color) {
         gradientColor = newColor
     }

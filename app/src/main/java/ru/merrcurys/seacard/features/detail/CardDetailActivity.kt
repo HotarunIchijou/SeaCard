@@ -1,6 +1,9 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.detail
 
+import android.app.Application
 import android.graphics.Bitmap
+import ru.merrcurys.seacard.features.crop.ImageCropDialog
+import ru.merrcurys.seacard.features.scan.CardInputSection
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,7 +19,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,7 +43,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Close
-import ru.merrcurys.seacard.ui.theme.SeaCardTheme
+import ru.merrcurys.seacard.core.design.SeaCardTheme
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.WriterException
@@ -48,14 +55,19 @@ import androidx.core.content.edit
 import com.google.zxing.datamatrix.encoder.SymbolShapeHint
 import android.graphics.BitmapFactory
 import androidx.compose.ui.draw.shadow
-import ru.merrcurys.seacard.ui.theme.DynamicGradientBackground
+import ru.merrcurys.seacard.core.design.DynamicGradientBackground
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.core.utils.createImagePickerChooserIntent
+import ru.merrcurys.seacard.domain.entity.Card as CardModel
 import androidx.compose.foundation.BorderStroke
 import androidx.core.graphics.get
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.filled.TouchApp
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
@@ -166,11 +178,11 @@ class CardDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        val cardName = intent.getStringExtra("card_name") ?: ""
-        val cardCode = intent.getStringExtra("card_code") ?: ""
-        val codeType = intent.getStringExtra("code_type") ?: "barcode"
-        val cardColor = intent.getIntExtra("card_color", 0xFFFFFFFF.toInt())
-        val coverAsset = intent.getStringExtra("cover_asset")
+        val cardId = intent.getLongExtra("card_id", -1L)
+        if (cardId < 0) {
+            finish()
+            return
+        }
         
         // Сохранение текущей яркости и увеличение ее.
         originalBrightness = window.attributes.screenBrightness
@@ -180,35 +192,36 @@ class CardDetailActivity : ComponentActivity() {
         setBrightness(1.0f) // Максимальная яркость
         
         setContent {
-            // frontCoverPath нужен для LaunchedEffect с доминантным цветом
-            var frontCoverPath by remember { mutableStateOf(
-                getSharedPreferences("cards", Context.MODE_PRIVATE)
-                    .getString("cover_front_${cardName}_${cardCode}", null)
-            ) }
+            val viewModel: CardDetailViewModel = viewModel(factory = CardDetailViewModelFactory(application, cardId))
+            val card by viewModel.card.collectAsState()
             var showDeleteDialog by remember { mutableStateOf(false) }
             var isDark by remember { mutableStateOf(loadThemePref(this@CardDetailActivity)) }
-            var cardNameState by remember { mutableStateOf(cardName) }
-            var cardCodeState by remember { mutableStateOf(cardCode) }
-            var codeTypeState by remember { mutableStateOf(codeType) }
-            var cardColorState by remember { mutableStateOf(cardColor) }
             val context = this@CardDetailActivity
             var dominantColor by remember { mutableStateOf<Int?>(null) }
             var frontImageUri by remember { mutableStateOf<Uri?>(null) }
             var showCropDialog by remember { mutableStateOf(false) }
             var cropImageUri by remember { mutableStateOf<Uri?>(null) }
-            val frontImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                if (uri != null) {
-                    cropImageUri = uri
-                    showCropDialog = true
+            var pendingFrontCameraUri by remember { mutableStateOf<Uri?>(null) }
+            val scope = rememberCoroutineScope()
+            val frontImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val uri = result.data?.data ?: pendingFrontCameraUri
+                    pendingFrontCameraUri = null
+                    if (uri != null) {
+                        cropImageUri = uri
+                        showCropDialog = true
+                    }
                 }
             }
             
-            // Получаем доминантный цвет из frontCoverPath (загруженная обложка) или coverAsset
-            LaunchedEffect(frontCoverPath, coverAsset, cardNameState, cardCodeState) {
-                if (frontCoverPath != null) {
-                    dominantColor = getDominantColorFromFile(frontCoverPath!!)
-                } else if (coverAsset != null) {
-                    dominantColor = getDominantColorFromAsset(context, coverAsset)
+            LaunchedEffect(card?.frontCoverPath) {
+                val c = card
+                if (c != null && c.frontCoverPath != null) {
+                    dominantColor = if (c.frontCoverPath!!.startsWith("cards/")) {
+                        getDominantColorFromAsset(context, c.frontCoverPath!!)
+                    } else {
+                        getDominantColorFromFile(c.frontCoverPath!!)
+                    }
                 }
             }
             
@@ -221,6 +234,12 @@ class CardDetailActivity : ComponentActivity() {
                 }
             }
             
+            val cardNameState = card?.name ?: ""
+            val cardCodeState = card?.code ?: ""
+            val codeTypeState = card?.type ?: "barcode"
+            val cardColorState = card?.color ?: 0xFFFFFFFF.toInt()
+            val frontCoverPath = card?.frontCoverPath
+            
             SeaCardTheme {
                 val baseColor = dominantColor?.let { Color(it) } ?: Color(cardColorState)
                 val backgroundColor = MaterialTheme.colorScheme.background
@@ -231,36 +250,37 @@ class CardDetailActivity : ComponentActivity() {
                 // Вычисляем контрастный цвет для текста на основе базового цвета градиента
                 val contrastTextColor = getContrastTextColor(baseColor)
                 
-                DynamicGradientBackground(colors = gradientColors) {
-                    CardDetailScreen(
-                        cardName = cardNameState,
-                        cardCode = cardCodeState,
-                        codeType = codeTypeState,
-                        cardColor = cardColorState,
-                        coverAsset = coverAsset,
-                        frontCoverPath = frontCoverPath,
-                        frontImageUri = frontImageUri,
-                        onFrontCoverPick = { frontImagePicker.launch("image/*") },
-                        onBack = { finish() },
-                        onDelete = {
-                            deleteCard(this@CardDetailActivity, cardNameState, cardCodeState, codeTypeState, cardColorState)
-                            setResult(RESULT_OK)
-                            finish()
-                        },
-                        onEdit = { newName, newCode, newType, newColor ->
-                            editCard(this@CardDetailActivity, cardNameState, cardCodeState, codeTypeState, cardColorState, newName, newCode, newType, newColor)
-                            cardNameState = newName
-                            cardCodeState = newCode
-                            codeTypeState = newType
-                            cardColorState = newColor
-                            // обновить frontCoverPath на новый путь
-                            frontCoverPath = getSharedPreferences("cards", MODE_PRIVATE)
-                                .getString("cover_front_${newName}_${newCode}", null)
-                        },
+                if (card == null) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    DynamicGradientBackground(colors = gradientColors) {
+                        CardDetailScreen(
+                            cardName = cardNameState,
+                            cardCode = cardCodeState,
+                            codeType = codeTypeState,
+                            cardColor = cardColorState,
+                            coverAsset = card?.coverAsset,
+                            frontCoverPath = frontCoverPath,
+                            frontImageUri = frontImageUri,
+                            note = card?.note ?: "",
+                            backCoverPath = card?.backCoverPath,
+                            onSaveNote = { viewModel.updateNote(it) },
+                            onSaveBackCover = { path -> path?.let { viewModel.updateBackCover(it) } },
+                            onFrontCoverPick = {
+                                val (intent, cameraUri) = createImagePickerChooserIntent(this@CardDetailActivity)
+                                pendingFrontCameraUri = cameraUri
+                                frontImagePicker.launch(intent)
+                            },
+                            onBack = { finish() },
+                            onDelete = { showDeleteDialog = true },
+                            onEdit = { newName, newCode, newType, newColor -> viewModel.updateCardFields(newName, newCode, newType, newColor) },
                         topBarContainerColor = Color.Transparent,
                         topBarTextColor = contrastTextColor
-                    )
-                    
+                        )
+                    }
+                
                     // Диалог подтверждения удаления
                     if (showDeleteDialog) {
                         AlertDialog(
@@ -271,6 +291,7 @@ class CardDetailActivity : ComponentActivity() {
                                 TextButton(
                                     onClick = {
                                         showDeleteDialog = false
+                                        viewModel.deleteCard { setResult(RESULT_OK); finish() }
                                     }
                                 ) {
                                     Text("Удалить", color = Color.Red)
@@ -294,18 +315,13 @@ class CardDetailActivity : ComponentActivity() {
                     imageUri = cropImageUri!!,
                     aspectRatio = 1.574f,
                     onCrop = { croppedBitmap ->
-                        // Удаляем старый файл, если был
-                        frontCoverPath?.let { oldPath ->
-                            try { File(oldPath).delete() } catch (_: Exception) {}
+                        card?.frontCoverPath?.let { oldPath ->
+                            if (!oldPath.startsWith("cards/")) try { File(oldPath).delete() } catch (_: Exception) {}
                         }
                         val timestamp = System.currentTimeMillis()
-                        val fileName = "front_${cardName}_$timestamp.webp"
+                        val fileName = "front_${card?.name}_$timestamp.webp"
                         val path = saveBitmapAsWebp(context, croppedBitmap, fileName)
-                        if (path != null) {
-                            context.getSharedPreferences("cards", MODE_PRIVATE)
-                                .edit { putString("cover_front_${cardName}_${cardCode}", path) }
-                            frontCoverPath = path
-                        }
+                        if (path != null) viewModel.updateFrontCover(path)
                         showCropDialog = false
                         cropImageUri = null
                     },
@@ -333,41 +349,6 @@ class CardDetailActivity : ComponentActivity() {
         }
     }
     
-    private fun deleteCard(context: Context, name: String, code: String, type: String, color: Int) {
-        val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-        val cards = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-        val cardToRemove = cards.find { cardString ->
-            val parts = cardString.split("|")
-            parts.isNotEmpty() && parts[0] == name && parts[1] == code && (parts.size < 3 || parts[2] == type) && (parts.size < 6 || parts[5].toIntOrNull() == color)
-        }
-        cardToRemove?.let { cards.remove(it) }
-        prefs.edit { putStringSet("card_list", cards) }
-    }
-    
-    private fun editCard(context: Context, oldName: String, oldCode: String, oldType: String, oldColor: Int, newName: String, newCode: String, newType: String, newColor: Int) {
-        val prefs = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-        val cards = prefs.getStringSet("card_list", setOf())?.toMutableSet() ?: mutableSetOf()
-        val cardToEdit = cards.find { cardString ->
-            val parts = cardString.split("|")
-            parts.isNotEmpty() && parts[0] == oldName && parts[1] == oldCode && (parts.size < 3 || parts[2] == oldType) && (parts.size < 6 || parts[5].toIntOrNull() == oldColor)
-        }
-        if (cardToEdit != null) {
-            cards.remove(cardToEdit)
-            val parts = cardToEdit.split("|")
-            val coverAsset = if (parts.size >= 7) parts[6] else null
-            val newCardString = when {
-                coverAsset != null -> "$newName|$newCode|$newType|${parts.getOrNull(3) ?: System.currentTimeMillis()}|${parts.getOrNull(4) ?: 0}|$newColor|$coverAsset"
-                parts.size == 2 -> "$newName|$newCode"
-                parts.size == 3 -> "$newName|$newCode|$newType"
-                parts.size == 5 -> "$newName|$newCode|$newType|${parts[3]}|${parts[4]}"
-                parts.size == 6 -> "$newName|$newCode|$newType|${parts[3]}|${parts[4]}|$newColor"
-                else -> "$newName|$newCode|$newType|${System.currentTimeMillis()}|0|$newColor"
-            }
-            cards.add(newCardString)
-            prefs.edit { putStringSet("card_list", cards) }
-        }
-    }
-    
     private fun loadThemePref(context: Context): Boolean {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         return prefs.getBoolean("dark_theme", true)
@@ -384,6 +365,10 @@ fun CardDetailScreen(
     coverAsset: String? = null,
     frontCoverPath: String? = null,
     frontImageUri: Uri? = null,
+    note: String = "",
+    backCoverPath: String? = null,
+    onSaveNote: (String) -> Unit = {},
+    onSaveBackCover: (String?) -> Unit = {},
     onFrontCoverPick: () -> Unit = {},
     onBack: () -> Unit,
     onDelete: () -> Unit,
@@ -414,35 +399,29 @@ fun CardDetailScreen(
     var editColor by remember { mutableStateOf(cardColor) }
     var editError by remember { mutableStateOf("") }
 
-    // Заметки
-    val noteKey = "note_${cardName}_${cardCode}_${codeType}"
-    var note by remember {
-        mutableStateOf(
-            context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-                .getString(noteKey, "") ?: ""
-        )
-    }
     var showNoteDialog by remember { mutableStateOf(false) }
     var showCoverDialog by remember { mutableStateOf(false) }
     var backImageUri by remember { mutableStateOf<Uri?>(null) }
     var showFullScreenImage by remember { mutableStateOf<Pair<Boolean, Uri?>>(false to null) }
-    // Новые состояния для crop back cover
     var backCropImageUri by remember { mutableStateOf<Uri?>(null) }
     var showBackCropDialog by remember { mutableStateOf(false) }
     val context2 = LocalContext.current
-    // Получаем путь к сохранённым обложкам (front/back) из SharedPreferences
-    val backCoverPath = context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-        .getString("cover_back_${cardName}_${cardCode}", null)
-    // Новое: Uri для CardInputSection
-    val frontCoverUri = frontCoverPath?.let { android.net.Uri.fromFile(java.io.File(it)) }
+    val frontCoverUri = frontCoverPath?.takeIf { !it.startsWith("cards/") }?.let { android.net.Uri.fromFile(java.io.File(it)) }
     val backCoverUri = backCoverPath?.let { android.net.Uri.fromFile(java.io.File(it)) }
     // Показываем frontCoverPath (webp) если есть, иначе coverAsset (assets/cards)
     val coverBitmap: ImageBitmap? = remember(frontCoverPath, coverAsset) {
         try {
             var result: ImageBitmap? = null
             frontCoverPath?.let { path ->
-                val bmp = BitmapFactory.decodeFile(path)
-                if (bmp != null) result = bmp.asImageBitmap()
+                if (path.startsWith("cards/")) {
+                    val input = context2.assets.open(path)
+                    val bmp = BitmapFactory.decodeStream(input)
+                    input.close()
+                    if (bmp != null) result = bmp.asImageBitmap()
+                } else {
+                    val bmp = BitmapFactory.decodeFile(path)
+                    if (bmp != null) result = bmp.asImageBitmap()
+                }
             }
             if (result == null && coverAsset != null) {
                 val input = context2.assets.open(coverAsset)
@@ -453,11 +432,15 @@ fun CardDetailScreen(
             result
         } catch (_: Exception) { null }
     }
-    // Лаунчеры для выбора фото
-    val backImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            backCropImageUri = uri
-            showBackCropDialog = true
+    var pendingBackCameraUri by remember { mutableStateOf<Uri?>(null) }
+    val backImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val uri = result.data?.data ?: pendingBackCameraUri
+            pendingBackCameraUri = null
+            if (uri != null) {
+                backCropImageUri = uri
+                showBackCropDialog = true
+            }
         }
     }
     var noteDraft by remember { mutableStateOf("") }
@@ -571,9 +554,9 @@ fun CardDetailScreen(
                         cardName = editName,
                         cardCode = editCode,
                         selectedColor = editColor,
-                        onCardNameChange = { editName = it },
+                        onCardNameChange = { value -> editName = value },
                         onCardCodeChange = {}, // поле не изменяется
-                        onColorChange = { editColor = it },
+                        onColorChange = { color -> editColor = color },
                         onSaveCard = {
                             if (editName.isBlank()) {
                                 editError = "Заполните имя карты"
@@ -833,9 +816,7 @@ fun CardDetailScreen(
                         TextButton(
                             onClick = {
                                 if (noteDraft.length <= 100) {
-                                    note = noteDraft
-                                    context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-                                        .edit { putString(noteKey, noteDraft) }
+                                    onSaveNote(noteDraft)
                                     showNoteDialog = false
                                 } else {
                                     noteError = "Максимум 100 символов"
@@ -878,23 +859,19 @@ fun CardDetailScreen(
                                         .clip(RoundedCornerShape(18.dp))
                                         .background(colorScheme.surfaceVariant.copy(alpha = 0.7f))
                                         .clickable {
-                                            // Только просмотр
-                                            frontCoverPath?.let { path ->
-                                                showFullScreenImage = true to Uri.fromFile(File(path))
-                                            } ?: run {
-                                                if (frontImageUri != null) {
-                                                    showFullScreenImage = true to frontImageUri
-                                                } else if (coverBitmap != null) {
-                                                    showFullScreenImage = true to null
-                                                }
+                                            // Только просмотр. Для asset (cards/...) Uri нет — полноэкран покажет coverBitmap
+                                            when {
+                                                frontCoverPath != null && !frontCoverPath!!.startsWith("cards/") ->
+                                                    showFullScreenImage = true to Uri.fromFile(File(frontCoverPath!!))
+                                                frontImageUri != null -> showFullScreenImage = true to frontImageUri
+                                                coverBitmap != null -> showFullScreenImage = true to null
                                             }
                                         },
                                 contentAlignment = Alignment.Center
                             ) {
                                 val frontBitmap = frontCoverPath?.let { path ->
-                                    try {
-                                        BitmapFactory.decodeFile(path)
-                                    } catch (_: Exception) { null }
+                                    if (path.startsWith("cards/")) null
+                                    else try { BitmapFactory.decodeFile(path) } catch (_: Exception) { null }
                                 } ?: frontImageUri?.let { rememberBitmapFromUri(it) } ?: coverBitmap?.let { null }
                                 if (frontBitmap != null) {
                                     Image(
@@ -1009,7 +986,11 @@ fun CardDetailScreen(
                                     Text("Загрузить", color = colorScheme.onSurface, fontWeight = FontWeight.Medium)
                                 }
                                 Button(
-                                    onClick = { backImagePicker.launch("image/*") },
+                                    onClick = {
+                                        val (intent, cameraUri) = createImagePickerChooserIntent(context)
+                                        pendingBackCameraUri = cameraUri
+                                        backImagePicker.launch(intent)
+                                    },
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(44.dp),
@@ -1100,8 +1081,7 @@ fun CardDetailScreen(
                 val fileName = "back_${cardName}_$timestamp.webp"
                 val path = saveBitmapAsWebp(context, croppedBitmap, fileName)
                 if (path != null) {
-                    context.getSharedPreferences("cards", Context.MODE_PRIVATE)
-                        .edit { putString("cover_back_${cardName}_${cardCode}", path) }
+                    onSaveBackCover(path)
                 }
                 showBackCropDialog = false
                 backCropImageUri = null

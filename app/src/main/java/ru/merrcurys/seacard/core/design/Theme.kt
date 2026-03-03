@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard.ui.theme
+package ru.merrcurys.seacard.core.design
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -21,7 +21,6 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = Color(0xFFFFFFFF),
 )
 
-// Градиенты
 enum class GradientColorOption(val color: Color) {
     BLUE(BerlinAzure),
     GREEN(GreenGradient),

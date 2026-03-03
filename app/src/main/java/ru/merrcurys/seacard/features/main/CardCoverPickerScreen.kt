@@ -1,4 +1,4 @@
-package ru.merrcurys.seacard
+package ru.merrcurys.seacard.features.main
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,7 +28,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.ui.layout.ContentScale
-import ru.merrcurys.seacard.CoverNames.coverNameMap
+import ru.merrcurys.seacard.core.utils.CoverNames.coverNameMap
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextAlign
@@ -35,9 +36,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
-import ru.merrcurys.seacard.ui.theme.BlackBackground
-import ru.merrcurys.seacard.ui.theme.GradientBackground
-import ru.merrcurys.seacard.ui.theme.GradientUtils
+import ru.merrcurys.seacard.core.design.BlackBackground
+import ru.merrcurys.seacard.core.design.GradientBackground
+import ru.merrcurys.seacard.core.design.GradientUtils
 import kotlin.text.substringBeforeLast
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -168,9 +169,10 @@ fun CardCoverPickerScreen(
                                 contentPadding = PaddingValues(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                flingBehavior = ScrollableDefaults.flingBehavior(),
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                items(filteredCovers) { coverName ->
+                                items(filteredCovers, key = { it }) { coverName ->
                                     val assetPath = "cards/$coverName"
                                     val imageBitmap: ImageBitmap? = try {
                                         val input = assetManager.open(assetPath)
