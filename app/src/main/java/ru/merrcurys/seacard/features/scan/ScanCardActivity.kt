@@ -107,6 +107,7 @@ class ScanCardActivity : ComponentActivity() {
                 }
             }
 
+            var pendingCoverPick by remember { mutableStateOf<String?>(null) }
             val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { hasCameraPermission = it }
             val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
                 if (uri != null) {
@@ -161,6 +162,22 @@ class ScanCardActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) hasCameraPermission = true
                 else permissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+            LaunchedEffect(hasCameraPermission, pendingCoverPick) {
+                if (!hasCameraPermission || pendingCoverPick == null) return@LaunchedEffect
+                when (pendingCoverPick) {
+                    "front" -> {
+                        val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
+                        pendingFrontCameraUri = cameraUri
+                        frontCoverPicker.launch(intent)
+                    }
+                    "back" -> {
+                        val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
+                        pendingBackCameraUri = cameraUri
+                        backCoverPicker.launch(intent)
+                    }
+                }
+                pendingCoverPick = null
             }
 
             LaunchedEffect(cardCode, viewModel.cardSaved.value) {
@@ -219,14 +236,24 @@ class ScanCardActivity : ComponentActivity() {
                             frontCoverUri = frontCoverUri,
                             backCoverUri = backCoverUri,
                             onFrontCoverPick = {
-                                val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
-                                pendingFrontCameraUri = cameraUri
-                                frontCoverPicker.launch(intent)
+                                if (hasCameraPermission) {
+                                    val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
+                                    pendingFrontCameraUri = cameraUri
+                                    frontCoverPicker.launch(intent)
+                                } else {
+                                    pendingCoverPick = "front"
+                                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
                             },
                             onBackCoverPick = {
-                                val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
-                                pendingBackCameraUri = cameraUri
-                                backCoverPicker.launch(intent)
+                                if (hasCameraPermission) {
+                                    val (intent, cameraUri) = createImagePickerChooserIntent(this@ScanCardActivity)
+                                    pendingBackCameraUri = cameraUri
+                                    backCoverPicker.launch(intent)
+                                } else {
+                                    pendingCoverPick = "back"
+                                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
                             },
                             onFrontCoverRemove = { viewModel.setFrontCoverUri(null) },
                             onBackCoverRemove = { viewModel.setBackCoverUri(null) }

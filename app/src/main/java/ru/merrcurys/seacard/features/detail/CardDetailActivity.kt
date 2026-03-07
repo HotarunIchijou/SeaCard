@@ -65,8 +65,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.core.graphics.get
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.filled.TouchApp
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.core.content.ContextCompat
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.layout.ContentScale
@@ -202,6 +205,13 @@ class CardDetailActivity : ComponentActivity() {
             var showCropDialog by remember { mutableStateOf(false) }
             var cropImageUri by remember { mutableStateOf<Uri?>(null) }
             var pendingFrontCameraUri by remember { mutableStateOf<Uri?>(null) }
+            var hasCameraPermission by remember {
+                mutableStateOf(ContextCompat.checkSelfPermission(this@CardDetailActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+            }
+            var pendingCoverPick by remember { mutableStateOf<String?>(null) }
+            val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                hasCameraPermission = granted
+            }
             val scope = rememberCoroutineScope()
             val frontImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
                 if (result.resultCode == android.app.Activity.RESULT_OK) {
@@ -213,7 +223,15 @@ class CardDetailActivity : ComponentActivity() {
                     }
                 }
             }
-            
+            LaunchedEffect(hasCameraPermission, pendingCoverPick) {
+                if (!hasCameraPermission || pendingCoverPick == null) return@LaunchedEffect
+                if (pendingCoverPick == "front") {
+                    val (intent, cameraUri) = createImagePickerChooserIntent(this@CardDetailActivity)
+                    pendingFrontCameraUri = cameraUri
+                    frontImagePicker.launch(intent)
+                }
+                pendingCoverPick = null
+            }
             LaunchedEffect(card?.frontCoverPath) {
                 val c = card
                 if (c != null && c.frontCoverPath != null) {
@@ -269,10 +287,17 @@ class CardDetailActivity : ComponentActivity() {
                             onSaveNote = { viewModel.updateNote(it) },
                             onSaveBackCover = { path -> path?.let { viewModel.updateBackCover(it) } },
                             onFrontCoverPick = {
-                                val (intent, cameraUri) = createImagePickerChooserIntent(this@CardDetailActivity)
-                                pendingFrontCameraUri = cameraUri
-                                frontImagePicker.launch(intent)
+                                if (hasCameraPermission) {
+                                    val (intent, cameraUri) = createImagePickerChooserIntent(this@CardDetailActivity)
+                                    pendingFrontCameraUri = cameraUri
+                                    frontImagePicker.launch(intent)
+                                } else {
+                                    pendingCoverPick = "front"
+                                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
                             },
+                            hasCameraPermission = hasCameraPermission,
+                            permissionLauncher = permissionLauncher,
                             onBack = { finish() },
                             onDelete = { showDeleteDialog = true },
                             onEdit = { newName, newCode, newType, newColor -> viewModel.updateCardFields(newName, newCode, newType, newColor) },
@@ -370,6 +395,8 @@ fun CardDetailScreen(
     onSaveNote: (String) -> Unit = {},
     onSaveBackCover: (String?) -> Unit = {},
     onFrontCoverPick: () -> Unit = {},
+    hasCameraPermission: Boolean = true,
+    permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>? = null,
     onBack: () -> Unit,
     onDelete: () -> Unit,
     onEdit: (String, String, String, Int) -> Unit,
@@ -433,6 +460,7 @@ fun CardDetailScreen(
         } catch (_: Exception) { null }
     }
     var pendingBackCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingBackPick by remember { mutableStateOf(false) }
     val backImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
             val uri = result.data?.data ?: pendingBackCameraUri
@@ -441,6 +469,14 @@ fun CardDetailScreen(
                 backCropImageUri = uri
                 showBackCropDialog = true
             }
+        }
+    }
+    LaunchedEffect(hasCameraPermission, pendingBackPick) {
+        if (hasCameraPermission && pendingBackPick) {
+            pendingBackPick = false
+            val (intent, cameraUri) = createImagePickerChooserIntent(context2)
+            pendingBackCameraUri = cameraUri
+            backImagePicker.launch(intent)
         }
     }
     var noteDraft by remember { mutableStateOf("") }
@@ -1009,9 +1045,14 @@ fun CardDetailScreen(
                                 }
                                 Button(
                                     onClick = {
-                                        val (intent, cameraUri) = createImagePickerChooserIntent(context)
-                                        pendingBackCameraUri = cameraUri
-                                        backImagePicker.launch(intent)
+                                        if (hasCameraPermission) {
+                                            val (intent, cameraUri) = createImagePickerChooserIntent(context)
+                                            pendingBackCameraUri = cameraUri
+                                            backImagePicker.launch(intent)
+                                        } else {
+                                            pendingBackPick = true
+                                            permissionLauncher?.launch(Manifest.permission.CAMERA)
+                                        }
                                     },
                                     modifier = Modifier
                                         .weight(1f)
