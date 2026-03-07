@@ -2,6 +2,10 @@ package ru.merrcurys.seacard.features.scan
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color as GColor
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -112,6 +116,40 @@ class ScanCardViewModel(application: Application, val coverAsset: String?) : And
         null
     }
 
+    private fun isColorDark(color: Int): Boolean {
+        val red = (color shr 16) and 0xFF
+        val green = (color shr 8) and 0xFF
+        val blue = color and 0xFF
+        val brightness = (red * 299 + green * 587 + blue * 114) / 1000
+        return brightness < 128
+    }
+
+    /** Генерирует Bitmap обложки из цвета фона и названия карты (для карт без загруженной обложки). */
+    private fun generateColorCoverBitmap(name: String, color: Int): Bitmap? = try {
+        val aspectRatio = 1.574f
+        val width = 600
+        val height = (width / aspectRatio).toInt()
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(color)
+        val textColor = if (isColorDark(color)) GColor.WHITE else GColor.BLACK
+        val paint = Paint().apply {
+            setColor(textColor)
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            textSize = 58f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val x = width / 2f
+        val y = height / 2f - (paint.descent() + paint.ascent()) / 2f
+        val displayName = if (name.isBlank()) "Карта" else name
+        canvas.drawText(displayName, x, y, paint)
+        bitmap
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+
     suspend fun saveCardWithCover(
         name: String,
         code: String,
@@ -134,7 +172,7 @@ class ScanCardViewModel(application: Application, val coverAsset: String?) : And
         ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(app)
     }
 
-    /** Сохраняет карту с обложками из Uri (конвертирует в файлы). Возвращает true если сохранено. */
+    /** Сохраняет карту с обложками из Uri (конвертирует в файлы). Если обложка не выбрана — генерирует из цвета и названия. */
     suspend fun saveCardWithCoverUris(
         name: String,
         code: String,
@@ -151,6 +189,13 @@ class ScanCardViewModel(application: Application, val coverAsset: String?) : And
                     if (bmp != null) frontPath = saveBitmapAsWebp(bmp, "front_${name}_$timestamp.webp")
                 }
             } catch (_: Exception) { }
+        }
+        if (frontPath == null && coverAsset == null) {
+            val safeName = name.replace(Regex("[^a-zA-Zа-яА-ЯёЁ0-9\\-_]"), "_").take(50).ifBlank { "card" }
+            generateColorCoverBitmap(name, color)?.let { bitmap ->
+                frontPath = saveBitmapAsWebp(bitmap, "front_${safeName}_$timestamp.webp")
+                bitmap.recycle()
+            }
         }
         backCoverUri.value?.let { uri ->
             try {
