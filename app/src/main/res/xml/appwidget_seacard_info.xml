@@ -9,4 +9,4 @@
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/widget_seacard_description"
-    android:previewLayout="@layout/widget_seacard" />
+    android:previewLayout="@layout/widget_seacard_preview" />
