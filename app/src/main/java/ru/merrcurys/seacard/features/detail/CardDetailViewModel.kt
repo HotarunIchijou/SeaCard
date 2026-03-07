@@ -69,6 +69,7 @@ class CardDetailViewModel(application: Application, val cardId: Long) : AndroidV
     fun deleteCard(onDone: () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             dao.deleteById(cardId)
+            ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(getApplication())
             withContext(Dispatchers.Main) { onDone() }
         }
     }

@@ -71,6 +71,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteCards(cardsToDelete: List<CardModel>) {
         viewModelScope.launch(Dispatchers.IO) {
             cardsToDelete.forEach { dao.deleteById(it.id) }
+            ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(getApplication())
         }
     }
 

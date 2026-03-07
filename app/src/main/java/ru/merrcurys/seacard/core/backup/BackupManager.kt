@@ -149,6 +149,7 @@ object BackupManager {
                 }
             }
         }
+        if (imported > 0) ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(context)
         Pair(imported, errors)
     }
 }

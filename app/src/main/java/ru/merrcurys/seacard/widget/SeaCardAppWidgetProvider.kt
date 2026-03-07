@@ -3,6 +3,7 @@ package ru.merrcurys.seacard.widget
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -72,5 +73,17 @@ class SeaCardAppWidgetProvider : AppWidgetProvider() {
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
         appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_cards_grid)
+    }
+
+    /** Вызвать при изменении списка карт (добавление/удаление), чтобы виджет обновился. */
+    companion object {
+        fun notifyDataChanged(context: Context) {
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+            val componentName = ComponentName(context, SeaCardAppWidgetProvider::class.java)
+            val ids = appWidgetManager.getAppWidgetIds(componentName)
+            for (id in ids) {
+                appWidgetManager.notifyAppWidgetViewDataChanged(id, R.id.widget_cards_grid)
+            }
+        }
     }
 }

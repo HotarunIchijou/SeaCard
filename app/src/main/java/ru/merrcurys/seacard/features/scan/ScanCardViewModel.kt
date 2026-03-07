@@ -131,6 +131,7 @@ class ScanCardViewModel(application: Application, val coverAsset: String?) : And
             backCoverPath = backPath,
             note = null
         ))
+        ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(app)
     }
 
     /** Сохраняет карту с обложками из Uri (конвертирует в файлы). Возвращает true если сохранено. */
