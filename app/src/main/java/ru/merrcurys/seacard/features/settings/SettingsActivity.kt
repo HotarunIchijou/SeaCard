@@ -84,7 +84,7 @@ class SettingsActivity : ComponentActivity() {
                 }
             }
         }
-        val importLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri != null) {
                 try {
                     val result = runBlocking(Dispatchers.IO) {
@@ -109,7 +109,9 @@ class SettingsActivity : ComponentActivity() {
             }
         }
         exportCards = { exportLauncher.launch("seacard_backup.zip") }
-        importCards = { importLauncher.launch("*/*") }
+        importCards = {
+            importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "text/plain"))
+        }
         setContent {
             val viewModel: SettingsViewModel = viewModel()
             val gradientColor by viewModel.gradientColor.collectAsState(initial = ru.merrcurys.seacard.core.design.BerlinAzure)
@@ -369,6 +371,7 @@ fun SettingsScreen(
                             runBlocking(Dispatchers.IO) {
                                 DatabaseProvider.get(context).cardDao().deleteAll()
                             }
+                            ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(context)
                             showDeleteDialog = false
                             onBack()
                         }

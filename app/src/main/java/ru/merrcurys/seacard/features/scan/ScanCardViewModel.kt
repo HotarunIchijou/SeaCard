@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import ru.merrcurys.seacard.core.db.CardEntity
 import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.core.utils.ColorCoverGenerator
 import ru.merrcurys.seacard.core.utils.CoverNames
 import java.io.File
 import java.io.FileOutputStream
@@ -131,9 +132,10 @@ class ScanCardViewModel(application: Application, val coverAsset: String?) : And
             backCoverPath = backPath,
             note = null
         ))
+        ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(app)
     }
 
-    /** Сохраняет карту с обложками из Uri (конвертирует в файлы). Возвращает true если сохранено. */
+    /** Сохраняет карту с обложками из Uri (конвертирует в файлы). Если обложка не выбрана — генерирует из цвета и названия. */
     suspend fun saveCardWithCoverUris(
         name: String,
         code: String,
@@ -150,6 +152,10 @@ class ScanCardViewModel(application: Application, val coverAsset: String?) : And
                     if (bmp != null) frontPath = saveBitmapAsWebp(bmp, "front_${name}_$timestamp.webp")
                 }
             } catch (_: Exception) { }
+        }
+        if (frontPath == null && coverAsset == null) {
+            val safeName = name.replace(Regex("[^a-zA-Zа-яА-ЯёЁ0-9\\-_]"), "_").take(50).ifBlank { "card" }
+            frontPath = ColorCoverGenerator.generateAndSaveAsWebp(app, name, color, "front_${safeName}_$timestamp.webp")
         }
         backCoverUri.value?.let { uri ->
             try {

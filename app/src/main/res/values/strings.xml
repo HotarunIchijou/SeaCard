@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">SeaCard</string>
+    <string name="widget_seacard_label">Мои карты</string>
+    <string name="widget_seacard_description">Список ваших карт лояльности, при нажатии открывает карту.</string>
 </resources>

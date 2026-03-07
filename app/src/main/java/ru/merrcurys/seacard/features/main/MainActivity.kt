@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import ru.merrcurys.seacard.core.utils.SortType
 import ru.merrcurys.seacard.core.design.SeaCardTheme
 import ru.merrcurys.seacard.core.design.GradientBackground
 import ru.merrcurys.seacard.core.design.GradientUtils
