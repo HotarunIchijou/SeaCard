@@ -694,7 +694,10 @@ fun CardDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(
+                            space = 12.dp,
+                            alignment = Alignment.CenterHorizontally
+                        ),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Кнопка "Заметки"
@@ -716,23 +719,27 @@ fun CardDetailScreen(
                                     .fillMaxSize()
                                     .padding(horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = if (note.isNotBlank()) {
+                                    Arrangement.spacedBy(12.dp)
+                                } else {
+                                    Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+                                }
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Заметки",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Text(
-                                    text = "Заметки",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(modifier = Modifier.weight(1f))
                                 if (note.isNotBlank()) {
-                        Text(
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Заметки",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Text(
+                                        text = "Заметки",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
                                         text = note,
                                         color = Color.White.copy(alpha = 0.8f),
                                         fontSize = 13.sp,
@@ -740,6 +747,21 @@ fun CardDetailScreen(
                                         textAlign = TextAlign.End,
                                         modifier = Modifier.weight(2f)
                                     )
+                                } else {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Заметки",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Text(
+                                        text = "Заметки",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
                         }
@@ -761,7 +783,7 @@ fun CardDetailScreen(
                                     ) { showCoverDialog = true }
                                     .padding(horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Image,
