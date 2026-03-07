@@ -96,8 +96,10 @@ class SeaCardAppWidgetProvider : AppWidgetProvider() {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val componentName = ComponentName(context, SeaCardAppWidgetProvider::class.java)
             val ids = appWidgetManager.getAppWidgetIds(componentName)
-            for (id in ids) {
-                appWidgetManager.notifyAppWidgetViewDataChanged(id, R.id.widget_cards_grid)
+            if (ids.isNotEmpty()) {
+                val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+                context.sendBroadcast(intent)
             }
         }
     }
