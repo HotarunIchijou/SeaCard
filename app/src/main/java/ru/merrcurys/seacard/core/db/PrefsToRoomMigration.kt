@@ -1,6 +1,7 @@
 package ru.merrcurys.seacard.core.db
 
 import android.content.Context
+import ru.merrcurys.seacard.core.utils.ColorCoverGenerator
 
 /**
  * Однократная миграция данных из SharedPreferences в Room.
@@ -11,6 +12,7 @@ object PrefsToRoomMigration {
     private const val PREFS_NAME = "cards"
     private const val KEY_CARD_LIST = "card_list"
     private const val KEY_MIGRATED = "migrated_to_room"
+    private const val KEY_COLOR_COVERS_MIGRATED = "color_covers_migrated_to_webp"
     private const val PREFIX_COVER_FRONT = "cover_front_"
     private const val PREFIX_COVER_BACK = "cover_back_"
     private const val PREFIX_NOTE = "note_"
@@ -20,6 +22,7 @@ object PrefsToRoomMigration {
      * Вызывать при первом обращении к БД (например, в DatabaseProvider.get).
      */
     suspend fun migrateIfNeeded(context: Context) {
+        migrateColorCoversToWebp(context)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_MIGRATED, false)) return
 
@@ -111,5 +114,32 @@ object PrefsToRoomMigration {
         }
 
         prefs.edit().putBoolean(KEY_MIGRATED, true).apply()
+    }
+
+    /**
+     * Однократная миграция: для старых кастомных карт (frontCoverPath == null, но есть color)
+     * генерирует обложку из цвета и названия и сохраняет в WebP.
+     */
+    private suspend fun migrateColorCoversToWebp(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_COLOR_COVERS_MIGRATED, false)) return
+
+        val db = DatabaseProvider.get(context)
+        val dao = db.cardDao()
+        val allCards = dao.getAll()
+
+        for (card in allCards) {
+            if (card.frontCoverPath != null) continue
+            val path = ColorCoverGenerator.generateAndSaveAsWebp(
+                context = context,
+                name = card.name,
+                color = card.color,
+                fileName = "front_${card.name.replace(Regex("[^a-zA-Zа-яА-ЯёЁ0-9\\-_]"), "_").take(50).ifBlank { "card" }}_migrated_${card.id}.webp"
+            )
+            path?.let { dao.updateFrontCover(card.id, it) }
+        }
+
+        prefs.edit().putBoolean(KEY_COLOR_COVERS_MIGRATED, true).apply()
+        ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(context)
     }
 }
