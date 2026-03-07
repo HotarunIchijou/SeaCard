@@ -371,6 +371,7 @@ fun SettingsScreen(
                             runBlocking(Dispatchers.IO) {
                                 DatabaseProvider.get(context).cardDao().deleteAll()
                             }
+                            ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(context)
                             showDeleteDialog = false
                             onBack()
                         }
