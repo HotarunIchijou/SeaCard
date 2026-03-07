@@ -26,6 +26,7 @@ class SeaCardAppWidgetProvider : AppWidgetProvider() {
 
     private fun getSystemAccentColor(context: Context): Int {
         return try {
+            ColorUtils.blendARGB(Color.GRAY, Color.WHITE, 0.7f)
             val systemTheme = ContextThemeWrapper(context, android.R.style.Theme_DeviceDefault_DayNight)
             val attrs = intArrayOf(
                 android.R.attr.colorPrimary,
@@ -47,7 +48,7 @@ class SeaCardAppWidgetProvider : AppWidgetProvider() {
             ColorUtils.HSLToColor(hsl)
         } catch (e: Exception) {
             // Запасной цвет при любой ошибке (светло-серый)
-            ColorUtils.blendARGB(Color.GRAY, Color.WHITE, 0.7f)
+            ColorUtils.blendARGB(Color.GRAY, Color.BLACK, 0.6f)
         }
     }
 
