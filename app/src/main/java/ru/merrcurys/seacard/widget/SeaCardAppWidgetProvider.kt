@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.view.ContextThemeWrapper
+import androidx.core.graphics.ColorUtils
 import android.widget.RemoteViews
 import ru.merrcurys.seacard.R
 import ru.merrcurys.seacard.features.detail.CardDetailActivity
@@ -25,15 +26,19 @@ class SeaCardAppWidgetProvider : AppWidgetProvider() {
 
     private fun getSystemAccentColor(context: Context): Int {
         val systemTheme = ContextThemeWrapper(context, android.R.style.Theme_DeviceDefault_DayNight)
-        // Пробуем colorPrimary (основной цвет системы), затем colorAccent
         val attrs = intArrayOf(
             android.R.attr.colorPrimary,
             android.R.attr.colorAccent
         )
         val ta = systemTheme.theme.obtainStyledAttributes(attrs)
-        val color = ta.getColor(0, Color.GRAY).takeIf { it != 0 } ?: ta.getColor(1, Color.GRAY)
+        val primary = ta.getColor(0, Color.GRAY).takeIf { it != 0 } ?: ta.getColor(1, Color.GRAY)
         ta.recycle()
-        return color
+        // Осветляем фон и добавляем насыщенности
+        val hsl = FloatArray(3)
+        ColorUtils.colorToHSL(primary, hsl)
+        hsl[1] = (hsl[1] * 2f).coerceAtMost(1f)  // чуть больше насыщенности
+        hsl[2] = 0.20f  // осветляем
+        return ColorUtils.HSLToColor(hsl)
     }
 
     private fun updateAppWidget(
