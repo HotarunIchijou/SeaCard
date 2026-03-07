@@ -9,6 +9,7 @@ import android.widget.RemoteViewsService
 import kotlinx.coroutines.runBlocking
 import ru.merrcurys.seacard.R
 import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.core.utils.CardSortUtil
 import ru.merrcurys.seacard.domain.entity.Card
 import java.io.File
 
@@ -25,7 +26,10 @@ class SeaCardRemoteViewsFactory(
     override fun onDataSetChanged() {
         runBlocking {
             val dao = DatabaseProvider.get(context).cardDao()
-            cards = dao.getAll().map { it.toCard() }
+            val raw = dao.getAll().map { it.toCard() }
+            val prefs = context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
+            val sortTypeName = prefs.getString("sort_type", null)
+            cards = CardSortUtil.sorted(raw, sortTypeName)
             coverBitmaps.clear()
             coverBitmaps.addAll(cards.map { card -> loadCoverBitmap(card) })
         }
