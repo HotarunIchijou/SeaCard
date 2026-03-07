@@ -25,20 +25,30 @@ class SeaCardAppWidgetProvider : AppWidgetProvider() {
     }
 
     private fun getSystemAccentColor(context: Context): Int {
-        val systemTheme = ContextThemeWrapper(context, android.R.style.Theme_DeviceDefault_DayNight)
-        val attrs = intArrayOf(
-            android.R.attr.colorPrimary,
-            android.R.attr.colorAccent
-        )
-        val ta = systemTheme.theme.obtainStyledAttributes(attrs)
-        val primary = ta.getColor(0, Color.GRAY).takeIf { it != 0 } ?: ta.getColor(1, Color.GRAY)
-        ta.recycle()
-        // Осветляем фон и добавляем насыщенности
-        val hsl = FloatArray(3)
-        ColorUtils.colorToHSL(primary, hsl)
-        hsl[1] = (hsl[1] * 2f).coerceAtMost(1f)  // чуть больше насыщенности
-        hsl[2] = 0.20f  // осветляем
-        return ColorUtils.HSLToColor(hsl)
+        return try {
+            val systemTheme = ContextThemeWrapper(context, android.R.style.Theme_DeviceDefault_DayNight)
+            val attrs = intArrayOf(
+                android.R.attr.colorPrimary,
+                android.R.attr.colorAccent
+            )
+            val ta = systemTheme.theme.obtainStyledAttributes(attrs)
+            val primary = ta.getColor(0, Color.GRAY).takeIf { it != 0 } ?: ta.getColor(1, Color.GRAY)
+            ta.recycle()
+
+            val hsl = FloatArray(3)
+            ColorUtils.colorToHSL(primary, hsl)
+            // Ограничиваем в допустимый диапазон (защита от «битых» тем)
+            hsl[0] = hsl[0].coerceIn(0f, 360f)
+            hsl[1] = hsl[1].coerceIn(0f, 1f)
+            hsl[2] = hsl[2].coerceIn(0f, 1f)
+            // Светлый фон: поднимаем насыщенность и яркость
+            hsl[1] = (hsl[1] * 2f).coerceIn(0f, 1f)
+            hsl[2] = 0.20f  // осветляем
+            ColorUtils.HSLToColor(hsl)
+        } catch (e: Exception) {
+            // Запасной цвет при любой ошибке (светло-серый)
+            ColorUtils.blendARGB(Color.GRAY, Color.WHITE, 0.7f)
+        }
     }
 
     private fun updateAppWidget(
