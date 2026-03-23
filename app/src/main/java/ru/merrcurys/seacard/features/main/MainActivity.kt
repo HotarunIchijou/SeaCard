@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import ru.merrcurys.seacard.core.rustore.RuStoreInAppUpdateController
 import ru.merrcurys.seacard.core.utils.SortType
 import ru.merrcurys.seacard.core.design.SeaCardTheme
 import ru.merrcurys.seacard.core.design.GradientBackground
@@ -74,6 +75,12 @@ class MainActivity : ComponentActivity() {
             val cardDetailLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
             val settingsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
             val context = this@MainActivity
+
+            DisposableEffect(Unit) {
+                val ruStoreUpdate = RuStoreInAppUpdateController(this@MainActivity)
+                ruStoreUpdate.checkOnLaunch()
+                onDispose { ruStoreUpdate.dispose() }
+            }
 
             LaunchedEffect(Unit) {
                 val window = this@MainActivity.window
