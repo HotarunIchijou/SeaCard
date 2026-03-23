@@ -6,6 +6,7 @@ import ru.merrcurys.seacard.features.scan.ScanCardActivity
 import ru.merrcurys.seacard.features.detail.CardDetailActivity
 import ru.merrcurys.seacard.features.settings.SettingsActivity
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -43,7 +44,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.first
 import ru.merrcurys.seacard.core.rustore.RuStoreInAppUpdateController
+import ru.merrcurys.seacard.core.rustore.RuStoreReviewHelper
 import ru.merrcurys.seacard.core.utils.SortType
 import ru.merrcurys.seacard.core.design.SeaCardTheme
 import ru.merrcurys.seacard.core.design.GradientBackground
@@ -59,6 +62,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.TextStyle
 import ru.merrcurys.seacard.domain.entity.Card as CardModel
+
+private const val RU_STORE_REVIEW_LOG_TAG = "RuStoreReview"
 
 class MainActivity : ComponentActivity() {
 
@@ -85,6 +90,15 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 val window = this@MainActivity.window
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+            }
+
+            // RuStore: оценка/отзыв — когда на главном экране и карт ≥ 5 (см. тег RuStoreReview в logcat)
+            LaunchedEffect(Unit) {
+                Log.i(RU_STORE_REVIEW_LOG_TAG, "Ожидание: главный экран (!picker) и карт >= 5, сейчас карт=${cards.size}")
+                snapshotFlow { !showCoverPicker && cards.size >= 5 }
+                    .first { it }
+                Log.i(RU_STORE_REVIEW_LOG_TAG, "Условие выполнено, вызываем RuStoreReviewHelper")
+                RuStoreReviewHelper.tryLaunchReview(this@MainActivity)
             }
 
             SeaCardTheme {

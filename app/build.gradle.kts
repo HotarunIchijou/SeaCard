@@ -44,6 +44,7 @@ android {
 dependencies {
     implementation(platform("ru.rustore.sdk:bom:2026.03.01"))
     implementation("ru.rustore.sdk:appupdate")
+    implementation("ru.rustore.sdk:review")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
