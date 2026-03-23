@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.seacard"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "2.6"
+        versionCode = 12
+        versionName = "2.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -42,6 +42,9 @@ android {
 }
 
 dependencies {
+    implementation(platform("ru.rustore.sdk:bom:2026.03.01"))
+    implementation("ru.rustore.sdk:appupdate")
+    implementation("ru.rustore.sdk:review")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
