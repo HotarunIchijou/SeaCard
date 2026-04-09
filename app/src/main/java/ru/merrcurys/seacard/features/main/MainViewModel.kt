@@ -3,6 +3,7 @@ package ru.merrcurys.seacard.features.main
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -13,8 +14,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import androidx.core.content.edit
 import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.core.design.BerlinAzure
+import ru.merrcurys.seacard.core.design.GradientColorOption
 import ru.merrcurys.seacard.core.utils.CardSortUtil
 import ru.merrcurys.seacard.core.utils.SortType
+import androidx.compose.ui.graphics.Color
 import ru.merrcurys.seacard.domain.entity.Card as CardModel
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -26,6 +30,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val sortType = MutableStateFlow(loadSortTypePref())
     val gridColumns = MutableStateFlow(loadGridColumnsPref())
+    val gradientColor = MutableStateFlow(loadGradientColorPref())
     val showCoverPicker = MutableStateFlow(false)
 
     val cards: StateFlow<List<CardModel>> = combine(cardsFromDb, sortType) { list, sort ->
@@ -41,6 +46,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadGridColumnsPref(): Int =
         prefs.getInt("grid_columns", 2).coerceIn(1, 4)
+
+    private fun loadGradientColorPref(): Color {
+        val colorValue = prefs.getInt("gradient_color", BerlinAzure.hashCode())
+        return GradientColorOption.values().find { it.color.hashCode() == colorValue }?.color ?: BerlinAzure
+    }
+
+    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        when (key) {
+            "grid_columns" -> gridColumns.value = loadGridColumnsPref()
+            "gradient_color" -> gradientColor.value = loadGradientColorPref()
+        }
+    }
+
+    init {
+        prefs.registerOnSharedPreferenceChangeListener(prefListener)
+    }
 
     fun setSortType(type: SortType) {
         prefs.edit { putString("sort_type", type.name) }
@@ -71,4 +92,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    override fun onCleared() {
+        prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
+        super.onCleared()
+    }
 }

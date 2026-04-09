@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
             val currentSortType by viewModel.sortType.collectAsStateWithLifecycle()
             val showCoverPicker by viewModel.showCoverPicker.collectAsStateWithLifecycle()
             val gridColumns by viewModel.gridColumns.collectAsStateWithLifecycle()
+            val gradientColor by viewModel.gradientColor.collectAsStateWithLifecycle()
 
             val scanCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
             val cardDetailLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
@@ -118,6 +119,7 @@ class MainActivity : ComponentActivity() {
                         cards = cards,
                         currentSortType = currentSortType,
                         gridColumns = gridColumns,
+                        gradientColor = gradientColor,
                         onAddCard = { viewModel.setShowCoverPicker(true) },
                         onCardClick = { card ->
                             viewModel.updateCardUsage(card.id)
@@ -139,6 +141,7 @@ fun MainScreen(
     cards: List<CardModel>,
     currentSortType: SortType,
     gridColumns: Int,
+    gradientColor: Color,
     onAddCard: () -> Unit,
     onCardClick: (CardModel) -> Unit,
     onSettingsClick: () -> Unit,
@@ -147,8 +150,6 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
-    // Загружаем градиентный цвет при каждом перерисовке для обновления при возвращении из настроек
-    val gradientColor = GradientUtils.loadGradientColorPref(context)
     GradientBackground(gradientColor = gradientColor) {
         var searchQuery by remember { mutableStateOf("") }
         var showSearch by remember { mutableStateOf(false) }
@@ -471,6 +472,6 @@ fun MainScreen(
 @Composable
 fun MainScreenPreview() {
     SeaCardTheme {
-        MainScreen(cards = emptyList(), currentSortType = SortType.ADD_TIME, gridColumns = 2, onAddCard = {}, onCardClick = {}, onSettingsClick = {}, onSortTypeChange = {}, onDeleteCards = {})
+        MainScreen(cards = emptyList(), currentSortType = SortType.ADD_TIME, gridColumns = 2, gradientColor = Color(0xFF000000), onAddCard = {}, onCardClick = {}, onSettingsClick = {}, onSortTypeChange = {}, onDeleteCards = {})
     }
 }
