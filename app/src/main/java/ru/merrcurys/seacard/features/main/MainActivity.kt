@@ -75,6 +75,8 @@ class MainActivity : ComponentActivity() {
             val cards by viewModel.cards.collectAsStateWithLifecycle(initialValue = emptyList())
             val currentSortType by viewModel.sortType.collectAsStateWithLifecycle()
             val showCoverPicker by viewModel.showCoverPicker.collectAsStateWithLifecycle()
+            val gridColumns by viewModel.gridColumns.collectAsStateWithLifecycle()
+            val gradientColor by viewModel.gradientColor.collectAsStateWithLifecycle()
 
             val scanCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
             val cardDetailLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
@@ -116,6 +118,8 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         cards = cards,
                         currentSortType = currentSortType,
+                        gridColumns = gridColumns,
+                        gradientColor = gradientColor,
                         onAddCard = { viewModel.setShowCoverPicker(true) },
                         onCardClick = { card ->
                             viewModel.updateCardUsage(card.id)
@@ -136,6 +140,8 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     cards: List<CardModel>,
     currentSortType: SortType,
+    gridColumns: Int,
+    gradientColor: Color,
     onAddCard: () -> Unit,
     onCardClick: (CardModel) -> Unit,
     onSettingsClick: () -> Unit,
@@ -144,8 +150,6 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
-    // Загружаем градиентный цвет при каждом перерисовке для обновления при возвращении из настроек
-    val gradientColor = GradientUtils.loadGradientColorPref(context)
     GradientBackground(gradientColor = gradientColor) {
         var searchQuery by remember { mutableStateOf("") }
         var showSearch by remember { mutableStateOf(false) }
@@ -349,7 +353,7 @@ fun MainScreen(
                         }
                     } else {
                         LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
+                            columns = GridCells.Fixed(gridColumns.coerceIn(1, 4)),
                             contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 80.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -468,6 +472,6 @@ fun MainScreen(
 @Composable
 fun MainScreenPreview() {
     SeaCardTheme {
-        MainScreen(cards = emptyList(), currentSortType = SortType.ADD_TIME, onAddCard = {}, onCardClick = {}, onSettingsClick = {}, onSortTypeChange = {}, onDeleteCards = {})
+        MainScreen(cards = emptyList(), currentSortType = SortType.ADD_TIME, gridColumns = 2, gradientColor = Color(0xFF000000), onAddCard = {}, onCardClick = {}, onSettingsClick = {}, onSortTypeChange = {}, onDeleteCards = {})
     }
 }
