@@ -25,6 +25,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val cardsFromDb = dao.getAllFlow().map { list -> list.map { it.toCard() } }
 
     val sortType = MutableStateFlow(loadSortTypePref())
+    val gridColumns = MutableStateFlow(loadGridColumnsPref())
     val showCoverPicker = MutableStateFlow(false)
 
     val cards: StateFlow<List<CardModel>> = combine(cardsFromDb, sortType) { list, sort ->
@@ -38,10 +39,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadSortTypePref(): SortType =
         CardSortUtil.parseSortType(prefs.getString("sort_type", null))
 
+    private fun loadGridColumnsPref(): Int =
+        prefs.getInt("grid_columns", 2).coerceIn(1, 4)
+
     fun setSortType(type: SortType) {
         prefs.edit { putString("sort_type", type.name) }
         sortType.value = type
         ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(getApplication())
+    }
+
+    fun setGridColumns(columns: Int) {
+        val fixed = columns.coerceIn(1, 4)
+        prefs.edit { putInt("grid_columns", fixed) }
+        gridColumns.value = fixed
     }
 
     fun setShowCoverPicker(show: Boolean) {
@@ -61,4 +71,4 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    }
+}

@@ -6,10 +6,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.ViewModule
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -17,24 +27,32 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ru.merrcurys.seacard.core.design.SeaCardTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.composed
 import androidx.core.view.WindowCompat
-import androidx.core.content.edit
 import androidx.compose.ui.tooling.preview.Preview
 import android.content.Intent
-import androidx.compose.material3.Button
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
@@ -44,8 +62,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import ru.merrcurys.seacard.core.design.GradientBackground
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.ArrowDownward
 import android.widget.Toast
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
@@ -115,6 +131,7 @@ class SettingsActivity : ComponentActivity() {
         setContent {
             val viewModel: SettingsViewModel = viewModel()
             val gradientColor by viewModel.gradientColor.collectAsState(initial = ru.merrcurys.seacard.core.design.BerlinAzure)
+            val gridColumns by viewModel.gridColumns.collectAsState(initial = 2)
             LaunchedEffect(Unit) {
                 WindowCompat.getInsetsController(this@SettingsActivity.window, this@SettingsActivity.window.decorView).isAppearanceLightStatusBars = false
             }
@@ -123,6 +140,8 @@ class SettingsActivity : ComponentActivity() {
                     SettingsScreen(
                         gradientColor = gradientColor,
                         onGradientColorChange = { viewModel.setGradientColor(it) },
+                        gridColumns = gridColumns,
+                        onGridColumnsChange = { viewModel.setGridColumns(it) },
                         onBack = { finish() },
                         topBarContainerColor = Color.Transparent,
                         onExport = { exportCards?.invoke() },
@@ -185,6 +204,8 @@ private suspend fun importLegacyTxt(context: Context, content: String): Pair<Int
 fun SettingsScreen(
     gradientColor: Color,
     onGradientColorChange: (Color) -> Unit,
+    gridColumns: Int,
+    onGridColumnsChange: (Int) -> Unit,
     onBack: () -> Unit,
     topBarContainerColor: Color = Color.Transparent,
     onExport: () -> Unit = {},
@@ -193,202 +214,516 @@ fun SettingsScreen(
     val colorScheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
+    var showGridColumnsDialog by remember { mutableStateOf(false) }
+    var showGradientDialog by remember { mutableStateOf(false) }
     val appVersion = BuildConfig.VERSION_NAME
+    val sectionCardColor = Color(0xFF141414)
+    val sectionShape = RoundedCornerShape(26.dp)
+    val sectionBorderColor = Color.White.copy(alpha = 0.06f)
+    val listItemColors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    val smallButtonUnselectedColor = Color(0xFF141414)
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+    val listState = rememberLazyListState()
+
+    Scaffold(
+        containerColor = Color.Transparent,
+        topBar = {
             TopAppBar(
-                title = { Text("Настройки", color = colorScheme.onSurface, fontWeight = FontWeight.Bold) },
-                actions = {
+                title = { Text("Настройки", fontWeight = FontWeight.SemiBold) },
+                navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад", tint = colorScheme.onSurface)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = topBarContainerColor,
+                    titleContentColor = colorScheme.onSurface,
+                    navigationIconContentColor = colorScheme.onSurface
+                )
             )
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            // Выбор градиентного цвета
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                color = colorScheme.onPrimary,
-                modifier = Modifier
-                    .padding(horizontal = 32.dp)
-                    .fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp)
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .navigationBarsPadding(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Text(
+                    text = "Персонализация",
+                    color = colorScheme.onSurface.copy(alpha = 0.9f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+
+            item {
+                Surface(
+                    shape = sectionShape,
+                    color = sectionCardColor,
+                    tonalElevation = 2.dp,
+                    shadowElevation = 0.dp
+                    ,
+                    modifier = Modifier.border(1.dp, sectionBorderColor, sectionShape)
                 ) {
-                    Text(
-                        text = "Градиентный цвет",
-                        color = colorScheme.onSurface,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 18.sp,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    
-                    // Цветовые варианты
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        for (option in GradientColorOption.values()) {
-                            val isSelected = gradientColor == option.color
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(
-                                        color = option.color,
-                                        shape = CircleShape
+                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        ListItem(
+                            headlineContent = { Text("Градиентный цвет") },
+                            supportingContent = {
+                                Text(
+                                    text = "Меняет фон приложения",
+                                    fontSize = 12.sp,
+                                    color = colorScheme.onSurface.copy(alpha = 0.62f)
+                                )
+                            },
+                            colors = listItemColors,
+                            leadingContent = {
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = null,
+                                    tint = colorScheme.primary
+                                )
+                            },
+                            trailingContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .background(gradientColor, CircleShape)
+                                            .border(
+                                                width = 1.dp,
+                                                color = Color.White.copy(alpha = 0.18f),
+                                                shape = CircleShape
+                                            )
                                     )
-                                    .border(
-                                        width = if (isSelected) 3.dp else 0.dp,
-                                        color = Color.White,
-                                        shape = CircleShape
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = colorScheme.onSurface.copy(alpha = 0.6f)
                                     )
-                                    .clickable { onGradientColorChange(option.color) }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .noRippleClickable { showGradientDialog = true }
+                        )
+                        Divider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                        ListItem(
+                            headlineContent = { Text("Отображение карт") },
+                            supportingContent = {
+                                Text(
+                                    text = "Колонок: ${gridColumns.coerceIn(1, 4)}",
+                                    fontSize = 12.sp,
+                                    color = colorScheme.onSurface.copy(alpha = 0.62f)
+                                )
+                            },
+                            colors = listItemColors,
+                            leadingContent = {
+                                Icon(
+                                    imageVector = Icons.Default.ViewModule,
+                                    contentDescription = null,
+                                    tint = colorScheme.primary
+                                )
+                            },
+                            trailingContent = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .noRippleClickable { showGridColumnsDialog = true }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = "Данные",
+                    color = colorScheme.onSurface.copy(alpha = 0.9f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+
+            item {
+                Surface(
+                    shape = sectionShape,
+                    color = sectionCardColor,
+                    tonalElevation = 2.dp,
+                    shadowElevation = 0.dp
+                    ,
+                    modifier = Modifier.border(1.dp, sectionBorderColor, sectionShape)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        ListItem(
+                            headlineContent = { Text("Экспорт") },
+                            supportingContent = {
+                                Text(
+                                    text = "Сохранить все карточки в файл",
+                                    fontSize = 12.sp,
+                                    color = colorScheme.onSurface.copy(alpha = 0.62f)
+                                )
+                            },
+                            colors = listItemColors,
+                            leadingContent = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = colorScheme.primary) },
+                            trailingContent = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .noRippleClickable { onExport() }
+                        )
+                        Divider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                        ListItem(
+                            headlineContent = { Text("Импорт") },
+                            supportingContent = {
+                                Text(
+                                    text = "Восстановить все карточки из файла",
+                                    fontSize = 12.sp,
+                                    color = colorScheme.onSurface.copy(alpha = 0.62f)
+                                )
+                            },
+                            colors = listItemColors,
+                            leadingContent = { Icon(Icons.Default.CloudDownload, contentDescription = null, tint = colorScheme.primary) },
+                            trailingContent = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .noRippleClickable { onImport() }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = "Поддержка",
+                    color = colorScheme.onSurface.copy(alpha = 0.9f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+
+            item {
+                Surface(
+                    shape = sectionShape,
+                    color = sectionCardColor,
+                    tonalElevation = 2.dp,
+                    shadowElevation = 0.dp
+                    ,
+                    modifier = Modifier.border(1.dp, sectionBorderColor, sectionShape)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        ListItem(
+                            headlineContent = { Text("Связаться с разработчиком") },
+                            supportingContent = {
+                                Text(
+                                    text = "Telegram-бот поддержки",
+                                    fontSize = 12.sp,
+                                    color = colorScheme.onSurface.copy(alpha = 0.62f)
+                                )
+                            },
+                            colors = listItemColors,
+                            leadingContent = { Icon(Icons.Outlined.Chat, contentDescription = null, tint = colorScheme.primary) },
+                            trailingContent = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .noRippleClickable {
+                                    val intent = Intent(Intent.ACTION_VIEW, "https://t.me/SeacardSupportBot".toUri())
+                                    context.startActivity(intent)
+                                }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = "Опасная зона",
+                    color = colorScheme.onSurface.copy(alpha = 0.9f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+
+            item {
+                Surface(
+                    shape = sectionShape,
+                    color = sectionCardColor,
+                    tonalElevation = 2.dp,
+                    shadowElevation = 0.dp
+                    ,
+                    modifier = Modifier.border(1.dp, sectionBorderColor, sectionShape)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        ListItem(
+                            headlineContent = { Text("Удалить все карточки") },
+                            supportingContent = {
+                                Text(
+                                    text = "Действие нельзя отменить",
+                                    fontSize = 12.sp,
+                                    color = colorScheme.onSurface.copy(alpha = 0.62f)
+                                )
+                            },
+                            colors = listItemColors,
+                            leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null, tint = Color(0xFFF44336)) },
+                            trailingContent = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .noRippleClickable { showDeleteDialog = true }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = "Дополнительно",
+                    color = colorScheme.onSurface.copy(alpha = 0.9f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+
+            item {
+                Surface(
+                    shape = sectionShape,
+                    color = sectionCardColor,
+                    tonalElevation = 2.dp,
+                    shadowElevation = 0.dp
+                    ,
+                    modifier = Modifier.border(1.dp, sectionBorderColor, sectionShape)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .noRippleClickable { showAboutDialog = true }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Info,
+                                contentDescription = null,
+                                tint = colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                text = "О приложении",
+                                modifier = Modifier.weight(1f),
+                                color = colorScheme.onSurface
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            // Кнопка Telegram
-            Button(
-                onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, "https://t.me/SeacardSupportBot".toUri())
-                    context.startActivity(intent)
-                },
-                shape = RoundedCornerShape(14.dp),
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = colorScheme.onPrimary,
-                    contentColor = colorScheme.onSurface
-                ),
-                elevation = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 32.dp)
-            ) {
-                Text("Связаться с разработчиком", fontWeight = FontWeight.Medium)
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-            // Кнопки экспорта и импорта карточек на одной линии
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 32.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Button(
-                    onClick = onExport,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = colorScheme.onPrimary,
-                        contentColor = colorScheme.onSurface
-                    ),
-                    elevation = null,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowUpward,
-                        contentDescription = null,
-                        tint = colorScheme.onSurface,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Экспорт", fontWeight = FontWeight.Medium)
-                }
-                Button(
-                    onClick = onImport,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = colorScheme.onPrimary,
-                        contentColor = colorScheme.onSurface
-                    ),
-                    elevation = null,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowDownward,
-                        contentDescription = null,
-                        tint = colorScheme.onSurface,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Импорт", fontWeight = FontWeight.Medium)
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-            // Кнопка удалить все карточки
-            Button(
-                onClick = { showDeleteDialog = true },
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336)),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("Удалить все карточки", color = Color.White, fontWeight = FontWeight.Medium)
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            // Версия приложения
-            Text(
-                text = "Версия приложения: $appVersion",
-                color = colorScheme.onSurface.copy(alpha = 0.5f),
-                fontSize = 14.sp,
-                modifier = Modifier.padding(bottom = 16.dp)
-                    .navigationBarsPadding()
-            )
         }
-        // Диалог подтверждения удаления
-        if (showDeleteDialog) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { showDeleteDialog = false },
-                title = { Text("Удалить все карточки?") },
-                text = { Text("Вы уверены что хотите удалить все карточки?") },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = {
-                            runBlocking(Dispatchers.IO) {
-                                DatabaseProvider.get(context).cardDao().deleteAll()
-                            }
-                            ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(context)
-                            showDeleteDialog = false
-                            onBack()
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Удалить все карточки?") },
+            text = { Text("Вы уверены, что хотите удалить все карточки?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        runBlocking(Dispatchers.IO) {
+                            DatabaseProvider.get(context).cardDao().deleteAll()
                         }
-                    ) {
-                        Text("Удалить", color = Color.Red)
+                        ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider.notifyDataChanged(context)
+                        showDeleteDialog = false
+                        onBack()
                     }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { showDeleteDialog = false }) {
-                        Text("Отмена")
+                ) {
+                    Text("Удалить", color = Color(0xFFF44336))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Отмена")
+                }
+            },
+            containerColor = sectionCardColor,
+            titleContentColor = colorScheme.onSurface,
+            textContentColor = colorScheme.onSurface
+        )
+    }
+
+    if (showAboutDialog) {
+        AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            title = { Text("О приложении") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                                append("Море Карт - ваш надежный цифровой кошелек для хранения всех скидок, бонусов и карт лояльности!")
+                            }
+                        },
+                        color = colorScheme.onSurface.copy(alpha = 0.9f)
+                    )
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("Разработчик:\n") }
+                            append("• Себежко Александр Андреевич")
+                        },
+                        color = colorScheme.onSurface.copy(alpha = 0.9f)
+                    )
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("Лицензия:\n") }
+                            append("Приложение расспространяется под лицензией GPL-3.0")
+                        },
+                        color = colorScheme.onSurface.copy(alpha = 0.9f)
+                    )
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                                append("Версия: $appVersion")
+                            }
+                        },
+                        color = colorScheme.onSurface.copy(alpha = 0.9f)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAboutDialog = false }) {
+                    Text("Закрыть")
+                }
+            },
+            containerColor = sectionCardColor,
+            titleContentColor = colorScheme.onSurface,
+            textContentColor = colorScheme.onSurface
+        )
+    }
+
+    if (showGridColumnsDialog) {
+        val current = gridColumns.coerceIn(1, 4)
+        AlertDialog(
+            onDismissRequest = { showGridColumnsDialog = false },
+            title = { Text("Отображение карт") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (1..4).forEach { cols ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .noRippleClickable {
+                                    onGridColumnsChange(cols)
+                                    showGridColumnsDialog = false
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "$cols",
+                                modifier = Modifier.weight(1f),
+                                color = colorScheme.onSurface
+                            )
+                            if (cols == current) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = colorScheme.primary
+                                )
+                            }
+                        }
                     }
-                },
-                containerColor = colorScheme.surface,
-                titleContentColor = colorScheme.onSurface,
-                textContentColor = colorScheme.onSurface
-            )
-        }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showGridColumnsDialog = false }) {
+                    Text("Закрыть")
+                }
+            },
+            containerColor = sectionCardColor,
+            titleContentColor = colorScheme.onSurface,
+            textContentColor = colorScheme.onSurface
+        )
+    }
+
+    if (showGradientDialog) {
+        AlertDialog(
+            onDismissRequest = { showGradientDialog = false },
+            title = { Text("Градиентный цвет") },
+            text = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    GradientColorOption.values().forEach { option ->
+                        val selected = gradientColor == option.color
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .background(option.color, CircleShape)
+                                .border(
+                                    width = if (selected) 3.dp else 1.dp,
+                                    color = if (selected) colorScheme.primary else Color.White.copy(alpha = 0.18f),
+                                    shape = CircleShape
+                                )
+                                .noRippleClickable {
+                                    onGradientColorChange(option.color)
+                                    showGradientDialog = false
+                                }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showGradientDialog = false }) {
+                    Text("Закрыть")
+                }
+            },
+            containerColor = sectionCardColor,
+            titleContentColor = colorScheme.onSurface,
+            textContentColor = colorScheme.onSurface
+        )
     }
 }
 
@@ -407,6 +742,8 @@ fun SettingsScreenPreview() {
         SettingsScreen(
             gradientColor = BerlinAzure,
             onGradientColorChange = {},
+            gridColumns = 2,
+            onGridColumnsChange = {},
             onBack = {},
             topBarContainerColor = Color.Transparent
         )
