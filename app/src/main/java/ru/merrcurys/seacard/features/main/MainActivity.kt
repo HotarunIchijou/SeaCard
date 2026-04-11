@@ -42,7 +42,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.first
@@ -65,6 +64,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.TextStyle
 import ru.merrcurys.seacard.domain.entity.Card as CardModel
+import ru.merrcurys.seacard.core.design.applySeaCardSystemBarColors
 
 private const val RU_STORE_REVIEW_LOG_TAG = "RuStoreReview"
 
@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applySeaCardSystemBarColors()
 
         setContent {
             val viewModel: MainViewModel = viewModel()
@@ -96,11 +97,6 @@ class MainActivity : ComponentActivity() {
                 val ruStoreUpdate = RuStoreInAppUpdateController(this@MainActivity)
                 ruStoreUpdate.checkOnLaunch()
                 onDispose { ruStoreUpdate.dispose() }
-            }
-
-            LaunchedEffect(Unit) {
-                val window = this@MainActivity.window
-                WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
             }
 
             // RuStore: оценка/отзыв — когда на главном экране и карт ≥ 5 (см. тег RuStoreReview в logcat)

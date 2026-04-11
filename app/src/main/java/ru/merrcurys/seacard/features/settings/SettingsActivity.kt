@@ -31,6 +31,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ru.merrcurys.seacard.core.design.applySeaCardSystemBarColors
 import ru.merrcurys.seacard.core.design.SeaCardTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBar
@@ -49,8 +50,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
-import androidx.compose.runtime.LaunchedEffect
-import androidx.core.view.WindowCompat
 import androidx.compose.ui.tooling.preview.Preview
 import android.content.Intent
 import androidx.compose.material.icons.filled.Delete
@@ -82,6 +81,7 @@ import ru.merrcurys.seacard.core.utils.CoverNames
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applySeaCardSystemBarColors()
         var exportCards: (() -> Unit)? = null
         var importCards: (() -> Unit)? = null
         val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
@@ -132,9 +132,6 @@ class SettingsActivity : ComponentActivity() {
             val viewModel: SettingsViewModel = viewModel()
             val gradientColor by viewModel.gradientColor.collectAsState(initial = ru.merrcurys.seacard.core.design.BerlinAzure)
             val gridColumns by viewModel.gridColumns.collectAsState(initial = 2)
-            LaunchedEffect(Unit) {
-                WindowCompat.getInsetsController(this@SettingsActivity.window, this@SettingsActivity.window.decorView).isAppearanceLightStatusBars = false
-            }
             SeaCardTheme {
                 GradientBackground(gradientColor = gradientColor) {
                     SettingsScreen(

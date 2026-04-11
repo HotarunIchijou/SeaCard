@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- До первого кадра Compose: фон #111111 -->
     <style name="Theme.SeaCard" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/app_launch_background</item>
         <item name="android:colorBackground">@color/app_launch_background</item>
-        <item name="android:statusBarColor">@color/app_launch_background</item>
-        <item name="android:navigationBarColor">@color/app_launch_background</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>
