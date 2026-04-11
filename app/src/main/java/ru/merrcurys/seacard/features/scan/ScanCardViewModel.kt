@@ -14,9 +14,9 @@ import kotlinx.coroutines.launch
 import ru.merrcurys.seacard.core.db.CardEntity
 import ru.merrcurys.seacard.core.db.DatabaseProvider
 import ru.merrcurys.seacard.core.utils.ColorCoverGenerator
+import ru.merrcurys.seacard.core.utils.CoverBitmapStorage
 import ru.merrcurys.seacard.core.utils.CoverNames
 import java.io.File
-import java.io.FileOutputStream
 
 class ScanCardViewModel(application: Application, val coverAsset: String?) : AndroidViewModel(application) {
 
@@ -69,9 +69,7 @@ class ScanCardViewModel(application: Application, val coverAsset: String?) : And
 
     fun onFrontCropResult(bitmap: Bitmap) {
         val file = File.createTempFile("front_crop_", ".webp", app.cacheDir)
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.WEBP, 90, out)
-        }
+        CoverBitmapStorage.saveBitmapAsWebpFile(file, bitmap)
         frontCoverUri.value = Uri.fromFile(file)
         showFrontCropDialog.value = false
         frontCropImageUri.value = null
@@ -79,9 +77,7 @@ class ScanCardViewModel(application: Application, val coverAsset: String?) : And
 
     fun onBackCropResult(bitmap: Bitmap) {
         val file = File.createTempFile("back_crop_", ".webp", app.cacheDir)
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.WEBP, 90, out)
-        }
+        CoverBitmapStorage.saveBitmapAsWebpFile(file, bitmap)
         backCoverUri.value = Uri.fromFile(file)
         showBackCropDialog.value = false
         backCropImageUri.value = null
@@ -100,18 +96,8 @@ class ScanCardViewModel(application: Application, val coverAsset: String?) : And
     fun setFrontCoverUri(uri: Uri?) { frontCoverUri.value = uri }
     fun setBackCoverUri(uri: Uri?) { backCoverUri.value = uri }
 
-    private fun saveBitmapAsWebp(bitmap: Bitmap, fileName: String): String? = try {
-        val coversDir = File(app.filesDir, "covers")
-        if (!coversDir.exists()) coversDir.mkdirs()
-        val file = File(coversDir, fileName)
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.WEBP, 90, out)
-        }
-        file.absolutePath
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
-    }
+    private fun saveBitmapAsWebp(bitmap: Bitmap, fileName: String): String? =
+        CoverBitmapStorage.saveBitmapAsWebpToCovers(app.filesDir, bitmap, fileName)
 
     suspend fun saveCardWithCover(
         name: String,
