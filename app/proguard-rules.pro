@@ -7,10 +7,8 @@
 # Аннотации (Room, Compose и др.)
 -keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault
 
-# --- ZXing (core + javase; javase тянет опциональные AWT/Swing классы) ---
+# --- ZXing ---
 -keep class com.google.zxing.** { *; }
--dontwarn java.awt.**
--dontwarn javax.swing.**
 
 # --- Kotlin / корутины ---
 -dontwarn kotlinx.coroutines.**
