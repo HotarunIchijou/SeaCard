@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: MainViewModel = viewModel()
             val cards by viewModel.cards.collectAsStateWithLifecycle(initialValue = emptyList())
+            val cardsFromDbReady by viewModel.cardsFromDbReady.collectAsStateWithLifecycle(initialValue = false)
             val currentSortType by viewModel.sortType.collectAsStateWithLifecycle()
             val showCoverPicker by viewModel.showCoverPicker.collectAsStateWithLifecycle()
             val gridColumns by viewModel.gridColumns.collectAsStateWithLifecycle()
@@ -125,6 +126,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     MainScreen(
                         cards = cards,
+                        cardsFromDbReady = cardsFromDbReady,
                         currentSortType = currentSortType,
                         gridColumns = gridColumns,
                         gradientColor = gradientColor,
@@ -147,6 +149,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(
     cards: List<CardModel>,
+    cardsFromDbReady: Boolean = true,
     currentSortType: SortType,
     gridColumns: Int,
     gradientColor: Color,
@@ -295,7 +298,7 @@ fun MainScreen(
                 )
             },
             floatingActionButton = {
-                if (!selectionMode) {
+                if (!selectionMode && cardsFromDbReady) {
                     val addFabShape = RoundedCornerShape(28.dp)
                     Surface(
                         onClick = onAddCard,
@@ -351,7 +354,32 @@ fun MainScreen(
                             }
                         }
                 ) {
-                    if (filteredCards.isEmpty()) {
+                    if (!cardsFromDbReady) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .offset(y = (-64).dp)
+                                .semantics { contentDescription = "Загружаем ваши карты из хранилища" }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Wallet,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground.copy(alpha = 0.18f),
+                                modifier = Modifier.size(72.dp)
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Text(
+                                text = "Загружаем ваши карты из хранилища",
+                                color = colorScheme.onBackground.copy(alpha = 0.7f),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 30.sp,
+                                modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else if (filteredCards.isEmpty()) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.align(Alignment.Center).offset(y = (-64).dp)
