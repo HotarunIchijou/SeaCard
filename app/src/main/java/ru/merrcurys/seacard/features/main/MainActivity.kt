@@ -1,7 +1,6 @@
 package ru.merrcurys.seacard.features.main
 
 import android.content.Intent
-import android.graphics.BitmapFactory
 import ru.merrcurys.seacard.features.scan.ScanCardActivity
 import ru.merrcurys.seacard.features.detail.CardDetailActivity
 import ru.merrcurys.seacard.features.settings.SettingsActivity
@@ -34,6 +33,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -52,18 +53,25 @@ import ru.merrcurys.seacard.core.design.SeaCardTheme
 import ru.merrcurys.seacard.core.design.GradientBackground
 import ru.merrcurys.seacard.core.design.GradientUtils
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
+import coil.request.ImageRequest
+import java.io.File
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.TextStyle
 import ru.merrcurys.seacard.domain.entity.Card as CardModel
 
 private const val RU_STORE_REVIEW_LOG_TAG = "RuStoreReview"
+
+/** Лицевая обложка в сетке: каталог (`cards/…`) или файл в хранилище приложения. */
+private fun mainGridCoverModel(frontPath: String): Any =
+    if (frontPath.startsWith("cards/")) "file:///android_asset/$frontPath"
+    else File(frontPath)
 
 class MainActivity : ComponentActivity() {
 
@@ -288,19 +296,37 @@ fun MainScreen(
             },
             floatingActionButton = {
                 if (!selectionMode) {
-                    FloatingActionButton(
+                    val addFabShape = RoundedCornerShape(28.dp)
+                    Surface(
                         onClick = onAddCard,
-                        containerColor = colorScheme.primary,
-                        shape = RoundedCornerShape(24.dp)
+                        modifier = Modifier
+                            .semantics { contentDescription = "Добавить карту" }
+                            .height(52.dp)
+                            .border(1.dp, Color.White.copy(alpha = 0.14f), addFabShape),
+                        shape = addFabShape,
+                        color = Color(0xE61C1C20),
+                        contentColor = Color.White,
+                        tonalElevation = 2.dp,
+                        shadowElevation = 10.dp
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp)) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             Icon(
                                 Icons.Filled.Add,
-                                contentDescription = "Добавить карту",
-                                tint = colorScheme.onPrimary
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(26.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Добавить карту", color = colorScheme.onPrimary)
+                            Text(
+                                text = "Добавить карту",
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                                letterSpacing = 0.25.sp
+                            )
                         }
                     }
                 }
@@ -405,7 +431,6 @@ fun MainScreen(
                                             modifier = Modifier.fillMaxSize(),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            // Затемнение поверх цвета карточки, если выбрана
                                             if (isSelected) {
                                                 Box(
                                                     modifier = Modifier
@@ -413,29 +438,33 @@ fun MainScreen(
                                                         .background(Color.Black.copy(alpha = 0.12f), shape = RoundedCornerShape(12.dp))
                                                 )
                                             }
-                                            val imageBitmap: ImageBitmap? = remember(frontPath to card.coverAsset) {
-                                                try {
-                                                    frontPath?.let {
-                                                        val bmp = BitmapFactory.decodeFile(it)
-                                                        if (bmp != null) return@remember bmp.asImageBitmap()
-                                                    }
-                                                    card.coverAsset?.let {
-                                                        val assetManager = context.assets
-                                                        val input = assetManager.open(it)
-                                                        val bmp = BitmapFactory.decodeStream(input)
-                                                        input.close()
-                                                        return@remember bmp?.asImageBitmap()
-                                                    }
-                                                    null
-                                                } catch (e: Exception) { null }
-                                            }
-                                            if (imageBitmap != null) {
-                                                Image(
-                                                    bitmap = imageBitmap,
+                                            if (frontPath != null) {
+                                                SubcomposeAsyncImage(
+                                                    model = ImageRequest.Builder(context)
+                                                        .data(mainGridCoverModel(frontPath))
+                                                        .crossfade(false)
+                                                        .build(),
                                                     contentDescription = null,
                                                     contentScale = ContentScale.Crop,
                                                     modifier = Modifier.fillMaxSize()
-                                                )
+                                                ) {
+                                                    when (painter.state) {
+                                                        is AsyncImagePainter.State.Success ->
+                                                            SubcomposeAsyncImageContent()
+                                                        is AsyncImagePainter.State.Loading,
+                                                        is AsyncImagePainter.State.Empty -> Unit
+                                                        is AsyncImagePainter.State.Error -> Text(
+                                                            text = card.name,
+                                                            color = if (isColorDark(card.color)) Color.White else Color.Black,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 18.sp,
+                                                            textAlign = TextAlign.Center,
+                                                            maxLines = 2,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.padding(8.dp)
+                                                        )
+                                                    }
+                                                }
                                             } else {
                                                 Text(
                                                     text = card.name,
