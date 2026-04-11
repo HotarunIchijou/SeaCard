@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.seacard"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "2.9"
+        versionCode = 14
+        versionName = "3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
