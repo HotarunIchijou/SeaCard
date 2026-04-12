@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import ru.merrcurys.seacard.core.design.applySeaCardSystemBarColors
 import ru.merrcurys.seacard.core.design.SeaCardTheme
 import ru.merrcurys.seacard.core.design.BlackBackground
 import ru.merrcurys.seacard.core.design.GradientBackground
@@ -66,6 +67,7 @@ class ScanCardActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applySeaCardSystemBarColors()
         cameraExecutor = Executors.newSingleThreadExecutor()
         val coverAsset = intent.getStringExtra("cover_asset")
 

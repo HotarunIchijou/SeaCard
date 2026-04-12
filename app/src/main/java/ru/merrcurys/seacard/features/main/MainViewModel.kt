@@ -8,8 +8,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import androidx.core.content.edit
@@ -26,7 +28,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = DatabaseProvider.get(application).cardDao()
     private val prefs = application.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
 
-    private val cardsFromDb = dao.getAllFlow().map { list -> list.map { it.toCard() } }
+    private val _cardsFromDbReady = MutableStateFlow(false)
+
+    private val cardsFromDb = dao.getAllFlow()
+        .map { list -> list.map { it.toCard() } }
+        .onEach { _cardsFromDbReady.value = true }
+
+    /** Первый эмит из Room получен — можно показывать пустой список или сетку (до этого не путать с «нет карт»). */
+    val cardsFromDbReady: StateFlow<Boolean> = _cardsFromDbReady.asStateFlow()
 
     val sortType = MutableStateFlow(loadSortTypePref())
     val gridColumns = MutableStateFlow(loadGridColumnsPref())

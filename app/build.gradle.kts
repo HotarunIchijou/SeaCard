@@ -13,15 +13,16 @@ android {
         applicationId = "com.example.seacard"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "2.9"
+        versionCode = 14
+        versionName = "3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -58,6 +59,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.material.icons.extended)
+    implementation("io.coil-kt:coil-compose:2.7.0")
     
     // CameraX
     implementation("androidx.camera:camera-core:1.4.2")
@@ -70,7 +72,6 @@ dependencies {
     
     // ZXing
     implementation("com.google.zxing:core:3.5.2")
-    implementation("com.google.zxing:javase:3.5.2")
 
     // Room
     implementation(libs.androidx.room.runtime)

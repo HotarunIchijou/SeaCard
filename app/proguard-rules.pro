@@ -1,21 +1,18 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# SeaCard — правила для R8 (release)
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Читаемые стектрейсы в Play Console / Firebase (деобфускация по mapping.txt)
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Аннотации (Room, Compose и др.)
+-keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# --- ZXing ---
+-keep class com.google.zxing.** { *; }
+
+# --- Kotlin / корутины ---
+-dontwarn kotlinx.coroutines.**
+
+# Виджет: провайдер и сервис объявлены в манифесте; фабрика создаётся из кода сервиса
+-keep class ru.merrcurys.seacard.widget.SeaCardAppWidgetProvider { <init>(); }
+-keep class ru.merrcurys.seacard.widget.SeaCardWidgetService { <init>(); }

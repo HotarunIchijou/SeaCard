@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Close
+import ru.merrcurys.seacard.core.design.applySeaCardSystemBarColors
 import ru.merrcurys.seacard.core.design.SeaCardTheme
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -59,6 +60,7 @@ import ru.merrcurys.seacard.core.design.DynamicGradientBackground
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ru.merrcurys.seacard.core.db.DatabaseProvider
+import ru.merrcurys.seacard.core.utils.CoverBitmapStorage
 import ru.merrcurys.seacard.core.utils.createImagePickerChooserIntent
 import ru.merrcurys.seacard.domain.entity.Card as CardModel
 import androidx.compose.foundation.BorderStroke
@@ -82,7 +84,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import java.io.File
-import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
 import java.io.FileInputStream
 import java.io.InputStream
@@ -158,21 +159,9 @@ suspend fun getDominantColorFromFile(filePath: String): Int? = withContext(Dispa
     }
 }
 
-// Функция для сохранения Bitmap в webp-файл
-fun saveBitmapAsWebp(context: Context, bitmap: Bitmap, fileName: String): String? {
-    return try {
-        val coversDir = File(context.filesDir, "covers")
-        if (!coversDir.exists()) coversDir.mkdirs()
-        val file = File(coversDir, fileName)
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.WEBP, 90, out)
-        }
-        file.absolutePath
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
-    }
-}
+// Функция для сохранения Bitmap в webp-файл (размер как у цветных обложек, см. CoverBitmapStorage)
+fun saveBitmapAsWebp(context: Context, bitmap: Bitmap, fileName: String): String? =
+    CoverBitmapStorage.saveBitmapAsWebpToCovers(context, bitmap, fileName)
 
 class CardDetailActivity : ComponentActivity() {
     private var originalBrightness: Float = 0f
@@ -180,7 +169,8 @@ class CardDetailActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+        applySeaCardSystemBarColors()
+
         val cardId = intent.getLongExtra("card_id", -1L)
         if (cardId < 0) {
             finish()
