@@ -50,7 +50,6 @@ import ru.merrcurys.seacard.core.rustore.RuStoreReviewHelper
 import ru.merrcurys.seacard.core.utils.SortType
 import ru.merrcurys.seacard.core.design.SeaCardTheme
 import ru.merrcurys.seacard.core.design.GradientBackground
-import ru.merrcurys.seacard.core.design.GradientUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalContext
@@ -62,6 +61,10 @@ import coil.request.ImageRequest
 import java.io.File
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material3.Text
+import androidx.compose.runtime.retain.retain
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextStyle
 import ru.merrcurys.seacard.domain.entity.Card as CardModel
 import ru.merrcurys.seacard.core.design.applySeaCardSystemBarColors
@@ -155,15 +158,15 @@ fun MainScreen(
     onSortTypeChange: (SortType) -> Unit,
     onDeleteCards: (List<CardModel>) -> Unit
 ) {
-    val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
     GradientBackground(gradientColor = gradientColor) {
-        var searchQuery by remember { mutableStateOf("") }
-        var showSearch by remember { mutableStateOf(false) }
-        var showFilterMenu by remember { mutableStateOf(false) }
-        var selectedCards by remember { mutableStateOf<Set<CardModel>>(emptySet()) }
-        var selectionMode by remember { mutableStateOf(false) }
-    
+        var searchQuery by rememberSaveable { mutableStateOf("") }
+        var showSearch by rememberSaveable { mutableStateOf(false) }
+        var showFilterMenu by rememberSaveable { mutableStateOf(false) }
+        var selectionMode by rememberSaveable { mutableStateOf(false) }
+        var selectedCards by retain { mutableStateOf<Set<CardModel>>(emptySet()) }
+        val focusRequester = retain { FocusRequester() }
+
         // Функция для определения темного цвета
         fun isColorDark(color: Int): Boolean {
             val red = (color shr 16) and 0xFF
@@ -198,6 +201,10 @@ fun MainScreen(
             selectionMode = false
             selectedCards = emptySet()
         }
+
+        BackHandler(enabled = showSearch) {
+            showSearch = false
+        }
     
         Scaffold(
             containerColor = Color.Transparent,
@@ -207,19 +214,27 @@ fun MainScreen(
                         if (selectionMode) {
                             Text("Выбрано: ${selectedCards.size}", color = colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                         } else if (showSearch) {
+                            LaunchedEffect(Unit) {
+                                focusRequester.requestFocus()
+                            }
+
                             OutlinedTextField(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
                                 placeholder = { Text("Поиск карт...") },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(end = 16.dp)
+                                    .focusRequester(focusRequester),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = colorScheme.onSurface,
                                     unfocusedTextColor = colorScheme.onSurface,
-                                    focusedBorderColor = Color.Transparent,
+                                    focusedBorderColor = colorScheme.primary,
                                     unfocusedBorderColor = Color.Transparent,
                                     focusedContainerColor = Color.Transparent,
                                     unfocusedContainerColor = Color.Transparent
                                 ),
+                                shape = RoundedCornerShape(100.dp),
                                 singleLine = true,
                                 textStyle = TextStyle(
                                     fontSize = 20.sp,
@@ -248,8 +263,22 @@ fun MainScreen(
                                 Icon(Icons.Default.Delete, contentDescription = "Удалить", tint = colorScheme.onSurface)
                             }
                         } else {
-                            IconButton(onClick = { showSearch = !showSearch }) {
-                                Icon(Icons.Default.Search, contentDescription = "Поиск", tint = colorScheme.onSurface)
+                            IconButton(
+                                onClick = { showSearch = !showSearch }
+                            ) {
+                                if (!showSearch) {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = "Поиск",
+                                        tint = colorScheme.onSurface
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = "Закрыть поиск",
+                                        tint = colorScheme.onSurface
+                                    )
+                                }
                             }
                             Box {
                                 IconButton(onClick = { showFilterMenu = true }) {
